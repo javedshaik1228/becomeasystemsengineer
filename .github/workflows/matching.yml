@@ -13,17 +13,28 @@ on:
       - ".github/workflows/matching.yml"
 
 jobs:
-  build-test:
+  learner-scaffold:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Configure
-        run: cmake -S capstone/matching -B build/matching -DCMAKE_BUILD_TYPE=RelWithDebInfo
+      - name: Configure learner workspace
+        run: cmake -S capstone/matching/work -B build/matching-work -DMATCHING_STEP=1 -DCMAKE_BUILD_TYPE=Debug
+      - name: Build learner workspace
+        run: cmake --build build/matching-work --parallel
+      - name: Confirm first gate starts red
+        run: '! ctest --test-dir build/matching-work --output-on-failure'
+
+  reference-regression:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure completed reference
+        run: cmake -S capstone/matching/solution-reference -B build/matching-reference -DCMAKE_BUILD_TYPE=Debug -DMATCHING_WITH_RDKAFKA=OFF
       - name: Build
-        run: cmake --build build/matching --parallel
+        run: cmake --build build/matching-reference --parallel
       - name: Test
-        run: ctest --test-dir build/matching --output-on-failure
+        run: ctest --test-dir build/matching-reference --output-on-failure
       - name: Replay mock data
         run: |
-          build/matching/matching-generate --output build/orders.csv --count 10000
-          build/matching/matching-engine build/orders.csv > build/fills.csv
+          build/matching-reference/matching-generate build/orders.csv 10000 42
+          build/matching-reference/matching-engine build/orders.csv > build/fills.csv

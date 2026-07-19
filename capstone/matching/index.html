@@ -3,54 +3,40 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="Independent low-latency modern C++ order matching engine capstone.">
-  <title>Matching Engine Capstone · NetForge</title>
+  <meta name="description" content="Build a low-latency C++ order matching engine through ten guided milestones.">
+  <title>Guided Matching Engine Capstone · NetForge</title>
   <link rel="stylesheet" href="../../assets/course.css">
 </head>
 <body>
   <main class="shell">
-    <header class="masthead">
-      <a class="brand" href="../../index.html">NetForge</a>
-      <span class="quiet">Independent capstone</span>
-    </header>
-
+    <header class="masthead"><a class="brand" href="../../index.html">NetForge</a><span class="quiet">Independent guided build</span></header>
     <section class="hero">
-      <p class="eyebrow">Modern C++20 · Linux / WSL / macOS · Build it, measure it, defend it</p>
-      <h1>Low-latency<br>order matching engine.</h1>
-      <p class="lede">Build a deterministic exchange core with price-time priority, a real limit order book, lock-free ingress, replayable market data, and production-shaped Redis/Kafka edges.</p>
-      <div class="actions" style="margin-top:1.3rem">
-        <a class="button" href="../../capstone/matching/README.md">Open project guide →</a>
-        <a class="button secondary" href="https://github.com/javedshaik1228/becomeasystemsengineer/tree/main/capstone/matching">View source on GitHub</a>
-      </div>
+      <p class="eyebrow">Modern C++20 · Linux / WSL / macOS · starts from a skeleton</p>
+      <h1>Build the engine.<br>One invariant at a time.</h1>
+      <p class="lede">Ten scoped milestones take you from order types to price-time priority, deterministic replay, lock-free ingress, Redis/Kafka edges, and an evidence-backed performance defense. You write the implementation.</p>
+      <div class="progress-row" aria-label="Capstone progress"><strong data-capstone-progress-count>0 / 10 milestones</strong><div class="progress-track"><span data-capstone-progress-bar></span></div></div>
+      <div class="actions" style="margin-top:1.3rem"><a class="button" data-capstone-resume href="steps/01-contract.html">Start Step 1</a><a class="button secondary" href="work/README.md">Open learner workspace</a></div>
     </section>
-
     <section>
-      <h2>What you will ship</h2>
-      <div class="grid">
-        <article class="card"><span class="day-number">01 · Matching core</span><h3>Price-time priority</h3><p>FIFO queues at each price level, maker-price execution, GTC/IOC behavior, cancellation, and explicit acknowledgements.</p></article>
-        <article class="card"><span class="day-number">02 · Concurrency</span><h3>Lock-free ingress</h3><p>A bounded sequence-number ring buffers orders with back-pressure while one consumer keeps book mutation deterministic.</p></article>
-        <article class="card"><span class="day-number">03 · Edges</span><h3>Redis + Kafka</h3><p>Publish fills through RESP2 Redis and optional librdkafka, without putting broker stalls on the matching path.</p></article>
-        <article class="card"><span class="day-number">04 · Evidence</span><h3>Replay and benchmark</h3><p>Generate deterministic CSV orders, replay them, run unit/ingress/mock tests, and measure throughput.</p></article>
-      </div>
+      <h2>Your build path</h2><p class="lede">Every milestone has a narrow scope, cumulative CTest gate, deliberate break cases, hints, and a proof checklist. All steps remain navigable; progress is guidance, not a lock.</p>
+      <ol class="capstone-map">
+        <li class="capstone-step" data-capstone-step-card="step-01"><span class="capstone-step-status" data-capstone-step-status>Up next</span><span class="day-number">Step 01 · 60 min</span><h3>Model the contract</h3><p>Define order/fill values, integer ticks, and validation.</p><a href="steps/01-contract.html">Open step →</a></li>
+        <li class="capstone-step" data-capstone-step-card="step-02"><span class="capstone-step-status" data-capstone-step-status>Upcoming</span><span class="day-number">Step 02 · 75 min</span><h3>Build price levels</h3><p>Rest orders and query the best bid and ask.</p><a href="steps/02-price-levels.html">Open step →</a></li>
+        <li class="capstone-step" data-capstone-step-card="step-03"><span class="capstone-step-status" data-capstone-step-status>Upcoming</span><span class="day-number">Step 03 · 90 min</span><h3>Match price-time priority</h3><p>Execute maker-price fills across FIFO levels.</p><a href="steps/03-price-time.html">Open step →</a></li>
+        <li class="capstone-step" data-capstone-step-card="step-04"><span class="capstone-step-status" data-capstone-step-status>Upcoming</span><span class="day-number">Step 04 · 75 min</span><h3>Complete the lifecycle</h3><p>Add GTC, IOC, duplicates, cancellation, and cleanup.</p><a href="steps/04-lifecycle.html">Open step →</a></li>
+        <li class="capstone-step" data-capstone-step-card="step-05"><span class="capstone-step-status" data-capstone-step-status>Upcoming</span><span class="day-number">Step 05 · 60 min</span><h3>Route one engine</h3><p>Isolate symbols and assign deterministic sequences.</p><a href="steps/05-engine.html">Open step →</a></li>
+        <li class="capstone-step" data-capstone-step-card="step-06"><span class="capstone-step-status" data-capstone-step-status>Upcoming</span><span class="day-number">Step 06 · 75 min</span><h3>Generate and replay</h3><p>Create seeded mock data and identical replay output.</p><a href="steps/06-replay.html">Open step →</a></li>
+        <li class="capstone-step" data-capstone-step-card="step-07"><span class="capstone-step-status" data-capstone-step-status>Upcoming</span><span class="day-number">Step 07 · 120 min</span><h3>Build lock-free ingress</h3><p>Use a bounded sequence-number ring and atomics.</p><a href="steps/07-lock-free-ingress.html">Open step →</a></li>
+        <li class="capstone-step" data-capstone-step-card="step-08"><span class="capstone-step-status" data-capstone-step-status>Upcoming</span><span class="day-number">Step 08 · 90 min</span><h3>Connect the pipeline</h3><p>Feed many producers into one deterministic writer.</p><a href="steps/08-pipeline.html">Open step →</a></li>
+        <li class="capstone-step" data-capstone-step-card="step-09"><span class="capstone-step-status" data-capstone-step-status>Upcoming</span><span class="day-number">Step 09 · 90 min</span><h3>Isolate Redis + Kafka</h3><p>Publish through bounded asynchronous adapters.</p><a href="steps/09-redis-kafka.html">Open step →</a></li>
+        <li class="capstone-step" data-capstone-step-card="step-10"><span class="capstone-step-status" data-capstone-step-status>Upcoming</span><span class="day-number">Step 10 · 120 min</span><h3>Measure and defend</h3><p>Benchmark, sanitize, profile, and explain limitations.</p><a href="steps/10-measure-defend.html">Open step →</a></li>
+      </ol>
     </section>
-
-    <section class="callout">
-      <strong>Independent by design.</strong> This project does not depend on completing the 14-day NetForge course. Use it as a portfolio artifact, interview deep dive, or separate systems-building track.
-    </section>
-
-    <section>
-      <h2>Start here</h2>
-      <pre><code>cmake -S capstone/matching -B build/matching -DCMAKE_BUILD_TYPE=Release
-cmake --build build/matching -j
-ctest --test-dir build/matching --output-on-failure
-build/matching/matching-generate --output orders.csv --count 100000
-build/matching/matching-engine orders.csv fills.csv
-build/matching/matching-bench --count 1000000</code></pre>
-      <div class="actions">
-        <a class="button" href="../../capstone/matching/README.md">Read the full guide →</a>
-        <a class="button secondary" href="../../index.html">Back to course home</a>
-      </div>
-    </section>
+    <section class="callout"><strong>Independent by design.</strong> No course lesson is a prerequisite. Start with the compiling learner scaffold, raise <code>MATCHING_STEP</code> only after each cumulative gate passes, and save evidence under <code>work/evidence/</code>.</section>
+    <section><h2>Starter setup only</h2><pre><code>cmake -S capstone/matching/work -B build/matching-work -DMATCHING_STEP=1
+cmake --build build/matching-work -j
+ctest --test-dir build/matching-work --output-on-failure</code></pre><div class="actions"><a class="button" href="steps/01-contract.html">Start with the first failing gate →</a><button class="button secondary" data-capstone-reset>Reset capstone progress</button></div><details><summary>Optional stuck protocol: completed reference</summary><p>Use <code>solution-reference/</code> only at the exact 20/40/60-minute checkpoint named in a step. Inspect the smallest relevant function, close it, and reimplement from memory. It is not the learner project.</p></details></section>
   </main>
+  <script src="../../assets/capstone.js"></script>
 </body>
 </html>

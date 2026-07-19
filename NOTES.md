@@ -7,3 +7,4 @@
 - A calm, distraction-light VS Code experience is useful but secondary to technical depth.
 - Prior depth is unknown. Day 1 contains a diagnostic and two lanes: Core and Stretch. Do not infer demonstrated mastery until the learner produces evidence.
 - Retrieval practice, failure diagnosis, and explaining trade-offs aloud are required every day.
+- The matching-engine capstone must start from scaffolding and teach construction through navigable, scoped proof-gated steps; the completed implementation must never be the default learner path.
