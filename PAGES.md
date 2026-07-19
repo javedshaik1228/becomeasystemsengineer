@@ -37,7 +37,7 @@ node scripts/check-content.mjs
 node --check assets/course.js
 ```
 
-The repository's Pages workflow is intentionally a static upload. The local
-`scripts/serve.sh` Markdown renderer remains useful for the richer local studio;
-the HTML lessons and dashboard are the canonical Pages experience.
-
+The Pages workflow builds readable `.html` versions of the canonical Markdown
+references before upload. The original `.md` files remain in the repository as
+source documents, while the deployed dashboard and lesson links point to the
+rendered pages.
