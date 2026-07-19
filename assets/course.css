@@ -127,6 +127,27 @@ h3 { margin: 2rem 0 0.7rem; font-size: 1.22rem; }
 
 .button.secondary { background: transparent; color: var(--accent); }
 
+.capstone-button { background: #9a4e12; border-color: #9a4e12; }
+
+.capstone-banner {
+  display: flex;
+  justify-content: space-between;
+  gap: 2rem;
+  align-items: center;
+  margin: 3.5rem 0 0;
+  padding: 1.5rem;
+  border: 1px solid #d9b58f;
+  border-radius: 0.95rem;
+  background: color-mix(in srgb, #fff4e7 88%, var(--panel));
+}
+
+.capstone-banner h2 { margin: 0.45rem 0 0.7rem; }
+.capstone-banner .lede { margin: 0; font-size: 1rem; }
+
+@media (max-width: 700px) {
+  .capstone-banner { align-items: flex-start; flex-direction: column; }
+}
+
 .grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));

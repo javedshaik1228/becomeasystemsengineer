@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Independent low-latency modern C++ order matching engine capstone.">
+  <title>Matching Engine Capstone · NetForge</title>
+  <link rel="stylesheet" href="../../assets/course.css">
+</head>
+<body>
+  <main class="shell">
+    <header class="masthead">
+      <a class="brand" href="../../index.html">NetForge</a>
+      <span class="quiet">Independent capstone</span>
+    </header>
+
+    <section class="hero">
+      <p class="eyebrow">Modern C++20 · Linux / WSL / macOS · Build it, measure it, defend it</p>
+      <h1>Low-latency<br>order matching engine.</h1>
+      <p class="lede">Build a deterministic exchange core with price-time priority, a real limit order book, lock-free ingress, replayable market data, and production-shaped Redis/Kafka edges.</p>
+      <div class="actions" style="margin-top:1.3rem">
+        <a class="button" href="../../capstone/matching/README.md">Open project guide →</a>
+        <a class="button secondary" href="https://github.com/javedshaik1228/becomeasystemsengineer/tree/main/capstone/matching">View source on GitHub</a>
+      </div>
+    </section>
+
+    <section>
+      <h2>What you will ship</h2>
+      <div class="grid">
+        <article class="card"><span class="day-number">01 · Matching core</span><h3>Price-time priority</h3><p>FIFO queues at each price level, maker-price execution, GTC/IOC behavior, cancellation, and explicit acknowledgements.</p></article>
+        <article class="card"><span class="day-number">02 · Concurrency</span><h3>Lock-free ingress</h3><p>A bounded sequence-number ring buffers orders with back-pressure while one consumer keeps book mutation deterministic.</p></article>
+        <article class="card"><span class="day-number">03 · Edges</span><h3>Redis + Kafka</h3><p>Publish fills through RESP2 Redis and optional librdkafka, without putting broker stalls on the matching path.</p></article>
+        <article class="card"><span class="day-number">04 · Evidence</span><h3>Replay and benchmark</h3><p>Generate deterministic CSV orders, replay them, run unit/ingress/mock tests, and measure throughput.</p></article>
+      </div>
+    </section>
+
+    <section class="callout">
+      <strong>Independent by design.</strong> This project does not depend on completing the 14-day NetForge course. Use it as a portfolio artifact, interview deep dive, or separate systems-building track.
+    </section>
+
+    <section>
+      <h2>Start here</h2>
+      <pre><code>cmake -S capstone/matching -B build/matching -DCMAKE_BUILD_TYPE=Release
+cmake --build build/matching -j
+ctest --test-dir build/matching --output-on-failure
+build/matching/matching-generate --output orders.csv --count 100000
+build/matching/matching-engine orders.csv fills.csv
+build/matching/matching-bench --count 1000000</code></pre>
+      <div class="actions">
+        <a class="button" href="../../capstone/matching/README.md">Read the full guide →</a>
+        <a class="button secondary" href="../../index.html">Back to course home</a>
+      </div>
+    </section>
+  </main>
+</body>
+</html>
