@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="A printable field guide to C++ concurrency, synchronization, atomics, and cancellation.">
+  <title>Concurrency and the Memory Model | NetForge</title>
+  <link rel="stylesheet" href="../assets/course.css">
+</head>
+<body>
+  <main class="shell lesson-shell">
+    <header class="masthead">
+      <a class="brand" href="../index.html">NetForge</a>
+      <span class="quiet">Reference 02 / 07</span>
+    </header>
+
+    <section class="hero">
+      <p class="eyebrow">Printable field guide</p>
+      <h1>Concurrency and the memory model</h1>
+      <p class="lede">Make shared state boring: assign ownership, bound work, synchronize invariants, and give every thread a stopping story.</p>
+      <div class="meta-row">
+        <span class="pill">Core: Days 4-5</span>
+        <span class="pill">C++20</span>
+        <span class="pill">TSan practiced</span>
+      </div>
+    </section>
+
+    <aside class="callout"><strong>Mission fit.</strong> The interview target is not memorizing every memory order. It is designing a race-free bounded queue and thread pool, defending the synchronization, and diagnosing a deliberately injected race.</aside>
+    <aside class="callout warning"><strong>Two-week boundary.</strong> Mutexes, condition variables, structured thread lifetime, cancellation, and ordinary atomics are core. Lock-free algorithms, memory reclamation, NUMA tuning, and weak-memory proofs are stretch.</aside>
+
+    <h2 id="model">Start with state, not threads</h2>
+    <ol class="flow">
+      <li><strong>Partition state.</strong><br>Prefer immutable, thread-confined, or message-passed data.</li>
+      <li><strong>Name each invariant.</strong><br>Which fields must change atomically as a group?</li>
+      <li><strong>Choose synchronization.</strong><br>Mutex/CV first; atomics for narrow independent state.</li>
+      <li><strong>Specify shutdown.</strong><br>Who requests stop, wakes waiters, joins, and rejects new work?</li>
+    </ol>
+
+    <p>Threads in one process share address space; each thread also has its own execution state and stack. The C++ model defines a <em>data race</em> as conflicting potentially concurrent actions, at least one a write, without the required atomicity or ordering. A data race is undefined behavior, not merely a stale-read risk. See the draft's <a href="https://eel.is/c++draft/intro.multithread">multithreaded execution rules</a>.</p>
+
+    <h2 id="happens-before">Happens-before is the visibility proof</h2>
+    <table>
+      <thead><tr><th>Producer action</th><th>Synchronizing edge</th><th>Consumer consequence</th></tr></thead>
+      <tbody>
+        <tr><td>Write protected state, then unlock mutex</td><td>Unlock synchronizes with a later successful lock of that mutex</td><td>Later lock holder sees preceding protected writes</td></tr>
+        <tr><td>Modify predicate under mutex, then notify</td><td>Wait atomically releases/reacquires mutex; predicate is checked while locked</td><td>Waiter observes a state satisfying the predicate, not a remembered notification</td></tr>
+        <tr><td>Initialize data, then release-store flag</td><td>Acquire-load observes that release sequence</td><td>Writes before release become visible after acquire</td></tr>
+        <tr><td>Thread function returns</td><td>Successful <code>join()</code></td><td>Joining thread observes completed thread effects</td></tr>
+      </tbody>
+    </table>
+    <p>The standard defines the complete <a href="https://eel.is/c++draft/atomics.order">atomic ordering relations</a>. In an interview, say which edge carries visibility. "There is a mutex" is not enough if some accesses bypass it.</p>
+
+    <h2 id="queue">The bounded queue pattern</h2>
+    <pre><code>// not_empty_ is std::condition_variable_any for the stop-token overload.
+std::optional&lt;Job&gt; pop(std::stop_token stop) {
+  std::unique_lock lock(mu_);
+  not_empty_.wait(lock, stop, [&amp;] {
+    return closed_ || !queue_.empty();
+  });
+
+  if (queue_.empty()) return std::nullopt; // closed or stopped
+  Job job = std::move(queue_.front());
+  queue_.pop_front();
+  lock.unlock();
+  not_full_.notify_one();
+  return job;
+}
+
+bool push(Job job) {
+  std::unique_lock lock(mu_);
+  not_full_.wait(lock, [&amp;] {
+    return closed_ || queue_.size() &lt; capacity_;
+  });
+  if (closed_) return false;
+  queue_.push_back(std::move(job));
+  lock.unlock();
+  not_empty_.notify_one();
+  return true;
+}</code></pre>
+
+    <p>The predicate owns correctness: condition-variable notifications are hints and wakeups can be spurious. The queue's invariant might be <code>size &lt;= capacity</code>, and all fields participating in that invariant are read and written under one mutex. Move expensive work out of the critical section. C++20's <a href="https://eel.is/c++draft/thread.jthread.class"><code>std::jthread</code></a> joins on destruction and carries a cooperative stop mechanism, but blocking APIs still need a wakeup path.</p>
+
+    <h3>Shutdown state machine</h3>
+    <table>
+      <thead><tr><th>State</th><th>Accept work?</th><th>Workers do</th><th>Transition</th></tr></thead>
+      <tbody>
+        <tr><td>Running</td><td>Yes, subject to capacity</td><td>Pop and execute</td><td>Owner requests close/stop</td></tr>
+        <tr><td>Draining</td><td>No</td><td>Finish queued work, or discard by declared policy</td><td>Queue empty / deadline reached</td></tr>
+        <tr><td>Stopped</td><td>No</td><td>Return and join</td><td>Terminal</td></tr>
+      </tbody>
+    </table>
+
+    <h2 id="choices">Pick the primitive that protects the invariant</h2>
+    <table>
+      <thead><tr><th>Primitive</th><th>Good fit</th><th>Warning</th></tr></thead>
+      <tbody>
+        <tr><td>Mutex</td><td>Several fields form one invariant; operations are compound</td><td>Keep lock ownership and scope visible</td></tr>
+        <tr><td>Condition variable</td><td>Wait until protected state satisfies a predicate</td><td>Always wait with a predicate in a loop</td></tr>
+        <tr><td>Semaphore</td><td>Count available permits/resources</td><td>Does not itself protect related container state</td></tr>
+        <tr><td>Atomic</td><td>Counter, flag, pointer, or carefully proven state machine</td><td>Atomic fields do not make a compound invariant atomic</td></tr>
+        <tr><td>Message passing</td><td>Transfer ownership and isolate mutable state</td><td>The channel still needs bounds, shutdown, and failure policy</td></tr>
+      </tbody>
+    </table>
+
+    <p>Use the simplest order that is correct. Sequential consistency is a defensible default for small coordination atomics. Move to acquire/release or relaxed only with a documented proof and measurement. <code>memory_order_relaxed</code> provides atomicity for that object, not cross-object ordering.</p>
+
+    <h2 id="deadlock">Deadlock and liveness review</h2>
+    <ul>
+      <li>Establish a global lock order; acquire multiple mutexes with <code>std::scoped_lock</code> where suitable.</li>
+      <li>Never call unknown callbacks, blocking I/O, logging pipelines, or user code while holding a state mutex.</li>
+      <li>Bound waits with a timeout only when the timeout has defined semantics; timing out is not automatic recovery.</li>
+      <li>Distinguish deadlock, livelock, starvation, and slow progress using thread backtraces and counters.</li>
+      <li>Run a dedicated <a href="https://clang.llvm.org/docs/ThreadSanitizer.html">ThreadSanitizer</a> build. Keep it separate from ASan, and exercise real concurrent paths.</li>
+    </ul>
+
+    <h2 id="traps">Interview traps</h2>
+    <table>
+      <thead><tr><th>Trap</th><th>Why it fails</th><th>Stronger answer</th></tr></thead>
+      <tbody>
+        <tr><td>Use <code>volatile</code> for thread synchronization</td><td>It does not provide inter-thread atomicity or happens-before in C++.</td><td>Use mutexes or atomics with an explicit ordering argument.</td></tr>
+        <tr><td>Guard a condition-variable wait with <code>if</code></td><td>Wakeups can be spurious and another waiter can consume the state.</td><td>Use the predicate overload or a <code>while</code> loop.</td></tr>
+        <tr><td>Detach worker threads to simplify cleanup</td><td>Ownership, completion, and access to destroyed state become uncontrolled.</td><td>Give threads an owner, stop protocol, wakeup, and join point.</td></tr>
+        <tr><td>Make every field atomic</td><td>A multi-field invariant can still be observed between updates.</td><td>Protect compound state with one synchronization regime.</td></tr>
+        <tr><td>Hold a lock across socket I/O</td><td>Unbounded delay serializes unrelated work and can deadlock callbacks.</td><td>Snapshot/transfer data under lock; perform I/O outside it.</td></tr>
+        <tr><td>"TSan passed, so it is race-free."</td><td>Dynamic tools only observe executed paths and have limitations.</td><td>Combine design proof, stress tests, assertions, and TSan evidence.</td></tr>
+        <tr><td>Use relaxed ordering because it is faster</td><td>It may remove the visibility edge the algorithm needs; the gain may be imaginary.</td><td>Start stronger, prove and benchmark any weakening.</td></tr>
+      </tbody>
+    </table>
+
+    <h2 id="stretch">Stretch shelf</h2>
+    <p>Acquire/release publication patterns, lock-free queues, ABA and reclamation, false sharing, cache-line padding, NUMA locality, work stealing, and formal progress guarantees. Learn to recognize these terms; do not claim a lock-free implementation without a memory-order proof and adversarial tests.</p>
+
+    <h2 id="glossary">Glossary</h2>
+    <table>
+      <thead><tr><th>Term</th><th>Course meaning</th></tr></thead>
+      <tbody>
+        <tr><td>Invariant</td><td>A property that must remain true across all allowed operations and failure paths.</td></tr>
+        <tr><td>Data race</td><td>Conflicting non-atomic accesses in different threads without a happens-before relationship, with at least one write.</td></tr>
+        <tr><td>Happens-before</td><td>The ordering relation used to prove that one operation's effects are visible to another.</td></tr>
+        <tr><td>Critical section</td><td>Code that accesses state protected by a synchronization primitive.</td></tr>
+        <tr><td>Backpressure</td><td>Limiting or admitting work so demand cannot grow without bound.</td></tr>
+        <tr><td>Cancellation</td><td>A cooperative request to stop work while preserving declared invariants.</td></tr>
+      </tbody>
+    </table>
+
+    <h2 id="anchors">Primary anchors</h2>
+    <p><a href="https://eel.is/c++draft/intro.multithread">C++ data races and execution</a> | <a href="https://eel.is/c++draft/atomics.order">Atomic order</a> | <a href="https://eel.is/c++draft/thread.jthread.class"><code>jthread</code></a> | <a href="https://isocpp.github.io/CppCoreGuidelines/CppCoreGuidelines#S-concurrency">Core Guidelines: concurrency</a> | <a href="https://clang.llvm.org/docs/ThreadSanitizer.html">TSan</a></p>
+
+    <nav class="lesson-nav" aria-label="Reference navigation">
+      <a href="../index.html">Course home</a>
+      <span><a href="../lessons/0004-make-shared-state-boring.html">Day 4</a> &middot; <a href="../lessons/0005-threads-with-lifetimes.html">Day 5</a></span>
+    </nav>
+  </main>
+</body>
+</html>

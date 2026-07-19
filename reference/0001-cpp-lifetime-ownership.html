@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="A printable field guide to C++ lifetime, ownership, RAII, move semantics, and resource safety.">
+  <title>C++ Lifetime and Ownership | NetForge</title>
+  <link rel="stylesheet" href="../assets/course.css">
+</head>
+<body>
+  <main class="shell lesson-shell">
+    <header class="masthead">
+      <a class="brand" href="../index.html">NetForge</a>
+      <span class="quiet">Reference 01 / 07</span>
+    </header>
+
+    <section class="hero">
+      <p class="eyebrow">Printable field guide</p>
+      <h1>C++ lifetime and ownership</h1>
+      <p class="lede">Reason from invariants: who owns each resource, how long every view remains valid, and what happens on every exit path.</p>
+      <div class="meta-row">
+        <span class="pill">Core: Days 1-3</span>
+        <span class="pill">C++20</span>
+        <span class="pill">Interview anchor</span>
+      </div>
+    </section>
+
+    <aside class="callout"><strong>Mission fit.</strong> A senior systems answer should make ownership and failure paths obvious before discussing clever syntax. Use this guide while building the frame codec and move-only file-descriptor wrapper.</aside>
+    <aside class="callout warning"><strong>Two-week boundary.</strong> Core means safe value types, RAII, move-only handles, and non-owning views. Allocator internals, placement construction, intrusive ownership, and exotic `shared_ptr` patterns are stretch topics, not implied mastery.</aside>
+
+    <h2 id="model">The four-question model</h2>
+    <ol class="flow">
+      <li><strong>What is the resource?</strong><br>Object, allocation, file descriptor, lock, socket, thread?</li>
+      <li><strong>Who owns it?</strong><br>Exactly one type should state the release obligation.</li>
+      <li><strong>What is borrowed?</strong><br>Pointer, reference, `span`, or `string_view`; document validity.</li>
+      <li><strong>Which invariant survives?</strong><br>Normal return, exception, move, cancellation, and error.</li>
+    </ol>
+
+    <p>Storage and object lifetime are related but not identical. "Stack" and "heap" describe storage strategies; neither says who owns a resource. The language defines when an object's lifetime begins and ends, and using storage as though an object were alive outside that interval can be undefined behavior. Use the public draft's <a href="https://eel.is/c++draft/basic.life">object lifetime rules</a> when exact semantics matter.</p>
+
+    <h2 id="ownership">Choose the least powerful ownership form</h2>
+    <table>
+      <thead><tr><th>Form</th><th>Meaning</th><th>Copy/move</th><th>Use when</th></tr></thead>
+      <tbody>
+        <tr><td>Value member</td><td>Containing object owns the value</td><td>Follows value type</td><td>Default; lifetime and locality are clear</td></tr>
+        <tr><td><code>std::unique_ptr&lt;T&gt;</code></td><td>Exclusive dynamic ownership</td><td>Move-only</td><td>Polymorphism, optional large object, stable address</td></tr>
+        <tr><td><code>std::shared_ptr&lt;T&gt;</code></td><td>Shared lifetime through a control block</td><td>Copy shares ownership</td><td>There is genuinely no single owner and cycles are controlled</td></tr>
+        <tr><td><code>T*</code> / <code>T&amp;</code></td><td>Normally a non-owning borrow</td><td>Copy aliases</td><td>Nullable pointer or non-null reference with externally guaranteed lifetime</td></tr>
+        <tr><td><code>std::span&lt;T&gt;</code></td><td>Borrowed contiguous sequence</td><td>Copy aliases</td><td>Pass buffer plus size without ownership transfer</td></tr>
+        <tr><td><code>std::string_view</code></td><td>Borrowed character sequence</td><td>Copy aliases</td><td>Read-only string access while backing characters outlive the view</td></tr>
+      </tbody>
+    </table>
+    <p>The standard descriptions of <a href="https://eel.is/c++draft/unique.ptr"><code>unique_ptr</code></a> and <a href="https://eel.is/c++draft/views.span"><code>span</code></a> encode the essential contrast: an owner releases; a view never extends lifetime.</p>
+
+    <h2 id="raii">RAII: make illegal cleanup paths hard to express</h2>
+    <p>Resource Acquisition Is Initialization binds acquisition to object construction and release to destruction. Prefer the Rule of Zero: compose types that already manage themselves. If a class directly owns a raw resource, define or delete the special members deliberately (the Rule of Five).</p>
+
+    <pre><code>#include &lt;unistd.h&gt;
+#include &lt;utility&gt;
+
+class UniqueFd {
+public:
+  UniqueFd() noexcept = default;
+  explicit UniqueFd(int fd) noexcept : fd_(fd) {}
+  ~UniqueFd() { reset(); }
+
+  UniqueFd(const UniqueFd&amp;) = delete;
+  UniqueFd&amp; operator=(const UniqueFd&amp;) = delete;
+
+  UniqueFd(UniqueFd&amp;&amp; other) noexcept
+      : fd_(std::exchange(other.fd_, -1)) {}
+
+  UniqueFd&amp; operator=(UniqueFd&amp;&amp; other) noexcept {
+    if (this != &amp;other) reset(std::exchange(other.fd_, -1));
+    return *this;
+  }
+
+  [[nodiscard]] int get() const noexcept { return fd_; }
+  [[nodiscard]] explicit operator bool() const noexcept { return fd_ &gt;= 0; }
+  [[nodiscard]] int release() noexcept { return std::exchange(fd_, -1); }
+
+  void reset(int next = -1) noexcept {
+    const int old = std::exchange(fd_, next);
+    if (old &gt;= 0) ::close(old); // destructor cannot report close failure
+  }
+
+private:
+  int fd_ = -1;
+};</code></pre>
+
+    <p>The moved-from state remains valid and non-owning. Move operations are <code>noexcept</code>, allowing containers to relocate values safely. In production, operations requiring a reported close/flush error need an explicit method before destruction; a destructor must not throw. The C++ Core Guidelines' <a href="https://isocpp.github.io/CppCoreGuidelines/CppCoreGuidelines#S-resource">resource rules</a> are a useful review checklist.</p>
+
+    <h3>Resource invariant checklist</h3>
+    <ul class="checklist">
+      <li><input type="checkbox">One owner has the release responsibility.</li>
+      <li><input type="checkbox">Invalid and moved-from states are explicit and harmless.</li>
+      <li><input type="checkbox">Copy is either value-correct or deleted; move transfers exactly once.</li>
+      <li><input type="checkbox">Construction failure leaks nothing; partial work rolls back.</li>
+      <li><input type="checkbox">Borrowed views cannot outlive their backing storage by contract or construction.</li>
+      <li><input type="checkbox">Destruction is non-throwing and safe on every exit path.</li>
+    </ul>
+
+    <h2 id="safety">Error safety is an invariant, not an exception slogan</h2>
+    <table>
+      <thead><tr><th>Guarantee</th><th>After failure</th><th>Typical technique</th></tr></thead>
+      <tbody>
+        <tr><td>No-throw</td><td>Operation cannot fail through an exception</td><td>Destructors, swaps, narrow moves</td></tr>
+        <tr><td>Strong</td><td>Observable state is unchanged</td><td>Build temporary, validate, then commit/swap</td></tr>
+        <tr><td>Basic</td><td>Invariants hold, but state may change</td><td>RAII guards and carefully ordered mutation</td></tr>
+        <tr><td>No guarantee</td><td>Invariants may be broken</td><td>A design smell in reusable systems code</td></tr>
+      </tbody>
+    </table>
+
+    <p>Modern C++20 is most useful when it exposes contracts: values by default, <code>std::span</code> for buffer views, <code>std::optional</code> for optional values, <code>std::variant</code> for closed alternatives, and constrained templates where generic code is warranted. Do not add abstractions only to advertise a language feature.</p>
+
+    <h2 id="traps">Interview traps</h2>
+    <table>
+      <thead><tr><th>Trap</th><th>Why it fails</th><th>Stronger answer</th></tr></thead>
+      <tbody>
+        <tr><td>"A raw pointer owns the object."</td><td>The syntax carries no ownership semantics.</td><td>State ownership separately; use raw pointers/views primarily for borrows.</td></tr>
+        <tr><td>"<code>std::move</code> moves the object."</td><td>It is a cast enabling move overload resolution; the selected operation does the transfer.</td><td>Describe the type's move constructor and valid moved-from invariant.</td></tr>
+        <tr><td>"Use <code>shared_ptr</code> to be safe."</td><td>Shared lifetime adds allocation, atomic control-block traffic, cycles, and unclear ownership.</td><td>Prefer values or unique ownership; justify shared lifetime explicitly.</td></tr>
+        <tr><td>"A <code>shared_ptr</code> makes the object thread-safe."</td><td>Control-block operations can be synchronized while the pointed-to object's data still races.</td><td>Separate lifetime safety from state synchronization.</td></tr>
+        <tr><td>Return a <code>string_view</code> into a temporary/local string.</td><td>The view outlives the characters and dangles.</td><td>Return an owning string or tie the view to longer-lived storage.</td></tr>
+        <tr><td>"The destructor handles every error."</td><td>Destructors cannot reliably report failures such as final flush/close errors.</td><td>Provide an explicit commit/close when the result matters; retain RAII fallback cleanup.</td></tr>
+        <tr><td><code>delete this</code> as normal lifetime management.</td><td>Callers and aliases can keep using a destroyed object; ownership becomes opaque.</td><td>Put destruction under an explicit owner.</td></tr>
+      </tbody>
+    </table>
+
+    <h2 id="stretch">Stretch shelf</h2>
+    <p>After the core project is safe: allocator propagation and alignment, custom deleters, placement construction, polymorphic memory resources, <code>shared_ptr</code> aliasing, intrusive reference counting, and cache-aware layout. These are role-dependent depth topics, not prerequisites for the capstone.</p>
+
+    <h2 id="glossary">Glossary</h2>
+    <table>
+      <thead><tr><th>Term</th><th>Course meaning</th></tr></thead>
+      <tbody>
+        <tr><td>Owner</td><td>The entity responsible for releasing a resource.</td></tr>
+        <tr><td>Lifetime</td><td>The interval during which an object or storage-backed entity may be used according to its rules.</td></tr>
+        <tr><td>Resource</td><td>An acquired/released entity such as memory, a file descriptor, lock, socket, or thread.</td></tr>
+        <tr><td>Invariant</td><td>A property that must remain true across all allowed operations and failure paths.</td></tr>
+        <tr><td>Borrow</td><td>Non-owning access whose validity depends on another entity's lifetime and mutation rules.</td></tr>
+        <tr><td>RAII</td><td>A C++ technique binding resource ownership to object lifetime.</td></tr>
+      </tbody>
+    </table>
+
+    <h2 id="anchors">Primary anchors</h2>
+    <p><a href="https://eel.is/c++draft/basic.life">C++ object lifetime</a> | <a href="https://eel.is/c++draft/unique.ptr"><code>unique_ptr</code></a> | <a href="https://eel.is/c++draft/views.span"><code>span</code></a> | <a href="https://isocpp.github.io/CppCoreGuidelines/CppCoreGuidelines">C++ Core Guidelines</a></p>
+
+    <nav class="lesson-nav" aria-label="Reference navigation">
+      <a href="../index.html">Course home</a>
+      <span><a href="../lessons/0001-own-the-bytes.html">Day 1</a> &middot; <a href="../lessons/0002-never-leak-a-descriptor.html">Day 2</a> &middot; <a href="../lessons/0003-modern-cpp-interfaces.html">Day 3</a></span>
+    </nav>
+  </main>
+</body>
+</html>

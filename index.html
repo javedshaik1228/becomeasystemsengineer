@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="A self-guided 14-day C++ systems and networking interview course.">
+  <title>NetForge — 14-day C++ systems studio</title>
+  <link rel="stylesheet" href="assets/course.css">
+</head>
+<body>
+  <main class="shell">
+    <header class="masthead">
+      <a class="brand" href="index.html">NetForge</a>
+      <nav class="meta-row" aria-label="Course links">
+        <a href="COURSE.md">Course contract</a>
+        <a href="curriculum-manifest.json">Atomic schedule</a>
+        <a href="READINESS-MATRIX.md">Readiness map</a>
+        <a href="RESEARCH.md">Hiring research</a>
+        <a href="RESOURCES.md">Sources</a>
+      </nav>
+    </header>
+
+    <section class="hero">
+      <p class="eyebrow">C++20 · Linux/WSL + macOS · 14 days</p>
+      <h1>Build the system.<br>Defend every choice.</h1>
+      <p class="lede">A focused interview studio for C++ systems, networking,
+        storage, security, and low-latency roles. You will ship one concurrent TCP
+        service, break it on purpose, read the evidence, and explain it aloud.</p>
+      <div class="progress-row" aria-label="Course progress">
+        <strong data-progress-count>0 / 14 lessons</strong>
+        <div class="progress-track"><span data-progress-bar></span></div>
+      </div>
+      <p class="quiet" data-diagnostic-summary aria-live="polite">Your lane is not set yet. Day 1 begins with a knowledge check and a 20-minute practical gate.</p>
+      <p class="quiet" data-review-summary aria-live="polite">The 1/3/7-day review queue starts after your first quiz.</p>
+      <a class="quiet" href="lessons/0001-own-the-bytes.html" data-review-link hidden>Review due item →</a>
+      <div class="actions" style="margin-top:1.3rem">
+        <a class="button" href="lessons/0001-own-the-bytes.html" data-resume-link>Start Day 1</a>
+        <a class="button secondary" href="SETUP.md">Prepare Linux / WSL</a>
+      </div>
+    </section>
+
+    <section>
+      <h2>The hiring signal</h2>
+      <p class="lede">Across six distinct identifiable rolesâ€”five backed by primary-source requirement sets and one by a current mirrorâ€”the durable core is
+        C/C++ on Unix/Linux, resource ownership, concurrency, TCP/IP and sockets,
+        cross-layer debugging, profiling, testing, and failure-aware design. NAS,
+        L2/L3 and security, payments/IPC, and low latency become deliberate branches
+        after that core. Duplicate and inaccessible job-board pages were excluded
+        from frequency counts.</p>
+      <div class="grid">
+        <article class="card"><span class="day-number">Core</span><h3>Own finite resources</h3><p>Lifetimes, RAII, descriptors, mappings, memory, errors, and destruction order.</p></article>
+        <article class="card"><span class="day-number">Core</span><h3>Bound concurrency</h3><p>Queues, workers, happens-before, cancellation, overload, races, and contention.</p></article>
+        <article class="card"><span class="day-number">Core</span><h3>Reason across layers</h3><p>Bytes to TCP to syscalls to storage, with packets, traces, stacks, and profiles as evidence.</p></article>
+      </div>
+    </section>
+
+    <section>
+      <h2>Week one · make it correct</h2>
+      <div class="grid">
+        <article class="card" data-day-card="day-01"><span class="day-number">Day 01 · 150 min</span><h3>Own the bytes</h3><p>Lifetime, framing, exact I/O, and your baseline diagnostic.</p><div class="actions"><a href="lessons/0001-own-the-bytes.html">Open lesson →</a></div></article>
+        <article class="card" data-day-card="day-02"><span class="day-number">Day 02 · 150 min</span><h3>Never leak a descriptor</h3><p>RAII, move-only ownership, failure paths, and Rule of Zero/Five.</p><div class="actions"><a href="lessons/0002-never-leak-a-descriptor.html">Open lesson →</a></div></article>
+        <article class="card" data-day-card="day-03"><span class="day-number">Day 03 · 150 min</span><h3>Modern C++ interfaces</h3><p>Views, variants, optionals, algorithms, errors, and explicit ownership.</p><div class="actions"><a href="lessons/0003-modern-cpp-interfaces.html">Open lesson →</a></div></article>
+        <article class="card" data-day-card="day-04"><span class="day-number">Day 04 · 180 min</span><h3>Make shared state boring</h3><p>Mutexes, predicates, condition variables, happens-before, and bounded queues.</p><div class="actions"><a href="lessons/0004-make-shared-state-boring.html">Open lesson →</a></div></article>
+        <article class="card" data-day-card="day-05"><span class="day-number">Day 05 · 180 min</span><h3>Threads with lifetimes</h3><p>Joining workers, cancellation, atomics, shutdown, and contention.</p><div class="actions"><a href="lessons/0005-threads-with-lifetimes.html">Open lesson →</a></div></article>
+        <article class="card" data-day-card="day-06"><span class="day-number">Day 06 · 150 min</span><h3>Read the wire</h3><p>Ethernet, VLAN, IPv4, TCP, byte order, header bounds, and captures.</p><div class="actions"><a href="lessons/0006-read-the-wire.html">Open lesson →</a></div></article>
+        <article class="card" data-day-card="day-07"><span class="day-number">Day 07 · 180 min</span><h3>Socket reality</h3><p>Resolve, bind, accept, connect, partial I/O, EOF, timeouts, and integration.</p><div class="actions"><a href="lessons/0007-socket-reality.html">Open lesson →</a></div></article>
+      </div>
+    </section>
+
+    <section>
+      <h2>Week two · make it defensible</h2>
+      <div class="grid">
+        <article class="card" data-day-card="day-08"><span class="day-number">Day 08 · 180 min</span><h3>Scale the event loop</h3><p>Readiness, non-blocking state, output buffers, slow clients, and backpressure.</p><div class="actions"><a href="lessons/0008-scale-the-event-loop.html">Open lesson →</a></div></article>
+        <article class="card" data-day-card="day-09"><span class="day-number">Day 09 · 150 min</span><h3>Cross process boundaries</h3><p>Pipes, Unix sockets, shared memory, descriptor inheritance, and signals.</p><div class="actions"><a href="lessons/0009-cross-process-boundaries.html">Open lesson →</a></div></article>
+        <article class="card" data-day-card="day-10"><span class="day-number">Day 10 · 180 min</span><h3>Debug under fire</h3><p>GDB/LLDB, cores, syscall traces, sanitizers, profiles, and hypotheses.</p><div class="actions"><a href="lessons/0010-debug-under-fire.html">Open lesson →</a></div></article>
+        <article class="card" data-day-card="day-11"><span class="day-number">Day 11 · 180 min</span><h3>Persist and recover</h3><p>WAL ordering, fsync, torn writes, page cache, filesystems, and NAS semantics.</p><div class="actions"><a href="lessons/0011-persist-and-recover.html">Open lesson →</a></div></article>
+        <article class="card" data-day-card="day-12"><span class="day-number">Day 12 · 180 min</span><h3>Harden the boundary</h3><p>Hostile lengths, timeouts, limits, fuzzing, and security-layer boundaries.</p><div class="actions"><a href="lessons/0012-harden-the-boundary.html">Open lesson →</a></div></article>
+        <article class="card" data-day-card="day-13"><span class="day-number">Day 13 · 180 min</span><h3>Design and explain</h3><p>Capacity, overload, failure matrices, specialist branches, and senior stories.</p><div class="actions"><a href="lessons/0013-design-and-explain.html">Open lesson →</a></div></article>
+        <article class="card" data-day-card="day-14"><span class="day-number">Day 14 · 240 min</span><h3>Prove readiness</h3><p>Full test matrix, benchmarks, code review, and two evidence-scored mocks.</p><div class="actions"><a href="lessons/0014-prove-readiness.html">Open lesson →</a></div></article>
+      </div>
+    </section>
+
+    <section class="grid" style="margin-top:3.5rem">
+      <article class="card"><span class="day-number">Reference desk</span><h3>Fast recall, not rereading</h3><p>Printable ownership, concurrency, sockets, protocols, debugging, storage, and design sheets.</p><div class="actions"><a href="reference/0001-cpp-lifetime-ownership.html">Open references →</a></div></article>
+      <article class="card"><span class="day-number">Interview room</span><h3>Practice against evidence</h3><p>Four mock formats, a scored rubric, specialist prompts, coding drills, and a 1/3/7-day retrieval deck.</p><div class="actions"><a href="interview/MOCK-ROUNDS.md">Open mock rounds →</a><a href="interview/RETRIEVAL-DECK.md">Spaced retrieval →</a></div></article>
+      <article class="card"><span class="day-number">Local only</span><h3>Your progress stays yours</h3><p>The dashboard uses browser localStorage. Source code, test output, and evidence stay in this folder.</p><div class="actions"><button class="button secondary" data-reset-progress>Reset local progress</button></div></article>
+    </section>
+  </main>
+  <script src="assets/course.js"></script>
+</body>
+</html>

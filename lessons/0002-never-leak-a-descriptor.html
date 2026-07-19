@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Day 2 — Never leak a descriptor · NetForge</title><link rel="stylesheet" href="../assets/course.css"></head>
+<body data-day="02" data-title="Never leak a descriptor" data-duration="150"><main class="shell lesson-shell">
+<header class="masthead"><a class="brand" href="../index.html">NetForge</a><span class="quiet">Day 02 / 14</span></header><article>
+<p class="eyebrow">RAII · move semantics · failure paths</p><h1>Never leak a descriptor</h1>
+<p class="lede">Make a socket impossible to copy, safe to move, and boring to release—even when construction, parsing, or a later syscall fails.</p>
+<div class="meta-row"><span class="pill">150 minutes</span><span class="pill">Gate: day02</span><span class="pill">Output: UniqueFd</span></div>
+
+<h2>Recall before reading</h2><p>Without notes: list every exit path from a function that manually calls <code>close</code>. Which compiler-generated special members become wrong when an integer represents unique ownership? Why should a destructor avoid throwing?</p>
+
+<h2>The model: ownership is a type invariant</h2>
+<p>A descriptor is a small integer naming a process resource. The integer is copyable; the <em>right to close it</em> must not be. Wrap that right in a move-only object whose destructor releases once, whose moved-from state is invalid, and whose <code>release</code>/<code>reset</code> operations make transfer explicit. This is RAII applied beyond heap memory.</p>
+<blockquote>Raw handles can be non-owning observations. The owner is the object whose lifetime performs the matching release.</blockquote>
+<p>Read <a href="https://isocpp.github.io/CppCoreGuidelines/CppCoreGuidelines#r1-manage-resources-automatically-using-resource-handles-and-raii-resource-acquisition-is-initialization">C++ Core Guidelines R.1</a>, then the short <a href="../reference/0001-cpp-lifetime-ownership.html">ownership reference</a>. On Linux, <a href="https://man7.org/linux/man-pages/man2/close.2.html">close(2)</a> warns why blindly retrying <code>close</code> after <code>EINTR</code> can close a reused descriptor.</p>
+
+<h2>Build, break, explain</h2>
+<ol><li><strong>Build (60 min):</strong> complete <code>capstone/work/include/netforge/unique_fd.hpp</code>. Delete copy operations; implement noexcept move, self-move-safe assignment, <code>release</code>, and <code>reset</code>.</li><li><strong>Break (25 min):</strong> exercise default construction, move construction, move assignment over an already-owned descriptor, release, reset-to-same policy, and scope exit after a simulated error.</li><li><strong>Inspect (15 min):</strong> run under ASan/UBSan later if available, but first use <code>fcntl(fd, F_GETFD)</code> and <code>EBADF</code> to prove closure.</li></ol>
+<pre id="day02-command"><code>./scripts/check.sh work day02</code></pre><div class="actions"><button class="button secondary" data-copy="#day02-command">Copy command</button></div>
+
+<aside class="callout warning"><strong>Common trap.</strong> Retrying <code>close</code> is not analogous to retrying <code>read</code>. Release semantics are platform-specific; on Linux the descriptor may already be free and reused.</aside>
+<aside class="callout warning"><strong>Stuck protocol.</strong> At 20 minutes, write the exact descriptor state and one ownership hypothesis. At 40, reread only the RAII section of the <a href="../reference/0001-cpp-lifetime-ownership.html">ownership reference</a>. At 60, compare only <code>unique_fd.hpp</code> in <code>capstone/reference/</code>, close it, then reimplement from memory.</aside>
+
+<section class="quiz" data-quiz data-answer="b" data-correct="Correct. The moved-from object must no longer own the descriptor." data-incorrect="Track the sole right to close, not just the integer value."><h3>Retrieval check</h3><p>What must a move constructor guarantee?</p>
+<label class="choice"><input type="radio" name="q2" value="a"> Moving duplicates both descriptor ownership claims</label><label class="choice"><input type="radio" name="q2" value="b"> Moving transfers ownership and invalidates source</label><label class="choice"><input type="radio" name="q2" value="c"> Moving closes descriptor before destination construction</label><button class="button secondary">Check answer</button><p class="feedback" aria-live="polite"></p></section>
+
+<h2>Coding and interview drill</h2><p>Do <a href="../interview/CODING-DRILLS.md#day-02--lru-cache-with-stable-ownership">Day 2: LRU cache</a>. Then answer: “Why not use <code>shared_ptr&lt;int&gt;</code> for a socket?” Discuss semantic ownership, custom release, cycles/reference-count cost, and why a raw integer observation does not become an owner.</p>
+
+<h2>Proof gate</h2><ul class="checklist"><li><label><input type="checkbox" data-check-id="day02-tests"> <code>day02</code> passes.</label></li><li><label><input type="checkbox" data-check-id="day02-selfmove"> Move assignment handles an existing destination and self-move policy safely.</label></li><li><label><input type="checkbox" data-check-id="day02-explain"> I can name the owner at every descriptor boundary.</label></li><li><label><input type="checkbox" data-check-id="day02-evidence"> Evidence is under <code>capstone/work/evidence/day-02/</code>.</label></li></ul>
+<p><strong>Stretch:</strong> design a generic unique-resource wrapper and explain when its flexibility harms readability.</p><button class="button" data-lesson-complete="day-02">Mark lesson complete</button><p class="quiet">Ask the agent follow-ups with the ownership graph or failing descriptor check.</p>
+</article><nav class="lesson-nav"><a href="0001-own-the-bytes.html">← Day 1</a><a href="0003-modern-cpp-interfaces.html">Day 3 →</a></nav></main><script src="../assets/course.js"></script></body></html>

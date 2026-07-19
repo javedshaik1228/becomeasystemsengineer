@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="A printable field guide to POSIX I/O, TCP sockets, readiness, backpressure, IPC, and shutdown.">
+  <title>POSIX I/O and Sockets | NetForge</title>
+  <link rel="stylesheet" href="../assets/course.css">
+</head>
+<body>
+  <main class="shell lesson-shell">
+    <header class="masthead">
+      <a class="brand" href="../index.html">NetForge</a>
+      <span class="quiet">Reference 03 / 07</span>
+    </header>
+
+    <section class="hero">
+      <p class="eyebrow">Printable field guide</p>
+      <h1>POSIX I/O and sockets</h1>
+      <p class="lede">Treat every syscall as a partial state transition: inspect its return value, preserve framing, bound buffers, and make close semantics explicit.</p>
+      <div class="meta-row">
+        <span class="pill">Core: Days 7-9</span>
+        <span class="pill">Linux / WSL</span>
+        <span class="pill">macOS notes</span>
+      </div>
+    </section>
+
+    <aside class="callout"><strong>Mission fit.</strong> Build the NetForge service from a correct blocking connection first, then add readiness and IPC. The transferable skill is explaining partial I/O, stream framing, backpressure, and lifecycle under failure.</aside>
+    <aside class="callout warning"><strong>Two-week boundary.</strong> Robust blocking sockets and a small readiness loop are core. A production reactor, zero-copy pipeline, custom io_uring runtime, or portable async framework is stretch.</aside>
+
+    <h2 id="fd">The descriptor model</h2>
+    <p>A file descriptor (FD) is a process-local integer referring through the process table to an open file description or kernel object. Duplicated descriptors can share file offset and status flags. Descriptor ownership still needs RAII; the integer itself is not the resource. Start with <a href="https://man7.org/linux/man-pages/man2/socket.2.html"><code>socket(2)</code></a> and <a href="0001-cpp-lifetime-ownership.html">the ownership field guide</a>.</p>
+
+    <table>
+      <thead><tr><th>Return</th><th>Meaning</th><th>Typical response</th></tr></thead>
+      <tbody>
+        <tr><td><code>&gt; 0</code></td><td>That many bytes transferred; may be less than requested</td><td>Advance cursor; continue until protocol objective is met</td></tr>
+        <tr><td><code>0</code> from stream receive</td><td>Orderly peer EOF</td><td>Finish any valid buffered frames, then close connection state</td></tr>
+        <tr><td><code>-1, errno == EINTR</code></td><td>Interrupted before completion</td><td>Retry when operation semantics permit; also observe shutdown state</td></tr>
+        <tr><td><code>-1, EAGAIN/EWOULDBLOCK</code></td><td>Nonblocking operation cannot progress now</td><td>Preserve state and wait for relevant readiness</td></tr>
+        <tr><td>Other error</td><td>Operation-specific failure</td><td>Classify retryable/fatal, record context, preserve invariants</td></tr>
+      </tbody>
+    </table>
+
+    <h2 id="lifecycle">TCP server lifecycle</h2>
+    <ol class="flow">
+      <li><strong>Resolve.</strong><br><code>getaddrinfo</code>; support IPv4/IPv6 candidates.</li>
+      <li><strong>Create/configure.</strong><br><code>socket</code>, CLOEXEC, options, nonblocking if chosen.</li>
+      <li><strong>Bind/listen.</strong><br>Address plus port; backlog is not total capacity.</li>
+      <li><strong>Accept/process.</strong><br>Loop on accepted sockets; frame the byte stream.</li>
+      <li><strong>Drain/close.</strong><br>Stop accepts, finish policy, <code>shutdown</code>, release owner.</li>
+    </ol>
+    <p>Linux documents socket-layer behavior in <a href="https://man7.org/linux/man-pages/man7/socket.7.html"><code>socket(7)</code></a> and TCP-specific behavior in <a href="https://man7.org/linux/man-pages/man7/tcp.7.html"><code>tcp(7)</code></a>. Keep portable POSIX semantics separate from Linux-only flags and APIs.</p>
+
+    <h2 id="framing">TCP is a byte stream; your protocol supplies messages</h2>
+    <pre><code>// Fixed 4-byte big-endian length prefix; sketch, not complete production code.
+enum class Parse { need_more, frame_ready, protocol_error };
+
+Parse next_frame(std::span&lt;const std::byte&gt; input, Frame&amp; out) {
+  if (input.size() &lt; 4) return Parse::need_more;
+  const std::uint32_t n = decode_be32(input.first&lt;4&gt;());
+  if (n &gt; kMaxFrame) return Parse::protocol_error;
+  if (input.size() &lt; 4u + n) return Parse::need_more;
+  out.assign(input.subspan(4, n));
+  return Parse::frame_ready;
+}</code></pre>
+
+    <p>One <code>send</code> need not match one <code>recv</code>. Reads can split a frame or coalesce many frames. A correct parser preserves incomplete bytes, validates lengths before allocation/arithmetic, emits all complete frames, and caps buffered data. A correct writer preserves unsent suffixes after a short write.</p>
+
+    <h3>Blocking write-all loop</h3>
+    <pre><code>std::size_t sent = 0;
+while (sent &lt; bytes.size()) {
+  const auto n = ::send(fd, bytes.data() + sent,
+                        bytes.size() - sent, MSG_NOSIGNAL);
+  if (n &gt; 0) { sent += static_cast&lt;std::size_t&gt;(n); continue; }
+  if (n &lt; 0 &amp;&amp; errno == EINTR) continue;
+  throw SocketError(errno); // include operation and peer context
+}</code></pre>
+    <p><code>MSG_NOSIGNAL</code> is available on Linux; macOS commonly uses <code>SO_NOSIGPIPE</code>. Verify platform APIs. A write loop must also integrate deadlines/cancellation for a real service.</p>
+
+    <h2 id="readiness">Readiness is permission to try, not completion</h2>
+    <p>Nonblocking mode converts potential waiting into <code>EAGAIN</code>. A readiness API says an operation is likely to make progress; by the time you call it, state can have changed. Drain until <code>EAGAIN</code> when using edge-triggered modes, and retain per-connection input/output state.</p>
+    <table>
+      <thead><tr><th>Concern</th><th>Policy to state</th><th>Observable signal</th></tr></thead>
+      <tbody>
+        <tr><td>Slow reader</td><td>Bound per-connection output; pause reads, shed, or close at threshold</td><td>Queued output bytes and oldest age</td></tr>
+        <tr><td>Slow sender</td><td>Idle/read deadline and maximum partial-frame bytes</td><td>Partial input bytes and last progress</td></tr>
+        <tr><td>Accept overload</td><td>Connection cap, admission policy, FD reserve</td><td>Active connections, accepts rejected, EMFILE</td></tr>
+        <tr><td>Worker overload</td><td>Bound job queue and reject/degrade behavior</td><td>Queue depth, wait time, rejected jobs</td></tr>
+      </tbody>
+    </table>
+    <p>Linux <a href="https://man7.org/linux/man-pages/man7/epoll.7.html"><code>epoll(7)</code></a> and macOS <a href="https://developer.apple.com/library/archive/documentation/System/Conceptual/ManPages_iPhoneOS/man2/kevent.2.html"><code>kqueue</code>/<code>kevent</code></a> differ in event registration and reporting. The core interview invariant is portable: nonblocking state machines retain partial progress and never allow queues to grow without policy.</p>
+
+    <h2 id="ipc">IPC choice is a contract choice</h2>
+    <table>
+      <thead><tr><th>Mechanism</th><th>Boundary / shape</th><th>Strength</th><th>Cost or hazard</th></tr></thead>
+      <tbody>
+        <tr><td>Pipe</td><td>Related processes, byte stream</td><td>Simple kernel-buffered flow</td><td>One-way shape; framing and backpressure still required</td></tr>
+        <tr><td>Unix domain socket</td><td>Local processes, stream or datagram</td><td>Bidirectional; credentials and FD passing available</td><td>Protocol and lifecycle complexity</td></tr>
+        <tr><td>Shared memory</td><td>Mapped region</td><td>High-throughput shared data</td><td>Synchronization, layout/versioning, crash recovery</td></tr>
+        <tr><td><code>mmap</code> file</td><td>Memory/file mapping</td><td>Convenient random access and page cache use</td><td>Fault/error semantics, truncation hazards, durability not automatic</td></tr>
+      </tbody>
+    </table>
+    <p>Primary API anchors: <a href="https://man7.org/linux/man-pages/man7/pipe.7.html"><code>pipe(7)</code></a>, <a href="https://man7.org/linux/man-pages/man7/unix.7.html"><code>unix(7)</code></a>, <a href="https://man7.org/linux/man-pages/man7/shm_overview.7.html">POSIX shared memory</a>, and <a href="https://man7.org/linux/man-pages/man2/mmap.2.html"><code>mmap(2)</code></a>.</p>
+
+    <h2 id="shutdown">Signals and orderly shutdown</h2>
+    <p>Most library and C++ operations are not async-signal-safe. Keep a signal handler minimal: set a lock-free flag or write a byte to a self-pipe/event mechanism, then let the normal event loop perform shutdown. Consult <a href="https://man7.org/linux/man-pages/man7/signal-safety.7.html"><code>signal-safety(7)</code></a>. A defensible sequence is: stop admission, request cancellation, wake waiters, drain or reject by policy, call <code>shutdown</code> where wire semantics matter, join workers, then release descriptors.</p>
+
+    <h2 id="traps">Interview traps</h2>
+    <table>
+      <thead><tr><th>Trap</th><th>Why it fails</th><th>Stronger answer</th></tr></thead>
+      <tbody>
+        <tr><td>"One send equals one receive."</td><td>TCP exposes ordered bytes, not application message boundaries.</td><td>Define framing and incremental parser/writer state.</td></tr>
+        <tr><td>Treat <code>recv == 0</code> as retry</td><td>For a stream socket it means orderly EOF.</td><td>Process complete buffered frames, then end the connection.</td></tr>
+        <tr><td>Treat <code>EAGAIN</code> as fatal</td><td>It is expected when nonblocking I/O cannot progress.</td><td>Preserve state and wait for readiness.</td></tr>
+        <tr><td>Retry every <code>EINTR</code> blindly</td><td>Shutdown/deadline state may now require termination; some calls expose partial effects.</td><td>Retry according to operation semantics and current cancellation policy.</td></tr>
+        <tr><td>"Readable means a full frame is ready."</td><td>Readiness may represent one byte, EOF, or an error.</td><td>Read until would-block; feed an incremental bounded parser.</td></tr>
+        <tr><td>Assume <code>SO_REUSEADDR</code> means many listeners can share a port</td><td>Semantics vary by platform and differ from <code>SO_REUSEPORT</code>.</td><td>State the exact restart/load-distribution need and verify platform docs.</td></tr>
+        <tr><td>Forget close-on-exec</td><td>Descriptors can leak into executed child processes and prolong resource lifetime.</td><td>Use atomic CLOEXEC creation flags where available and test inheritance.</td></tr>
+        <tr><td>Unlimited output buffering</td><td>A slow peer converts memory into an unbounded queue.</td><td>Set watermarks, pause/shed, and expose queue metrics.</td></tr>
+      </tbody>
+    </table>
+
+    <h2 id="stretch">Stretch shelf</h2>
+    <p>Edge-triggered reactors, one-shot rearming, io_uring, zero-copy with <a href="https://man7.org/linux/man-pages/man2/sendfile.2.html"><code>sendfile</code></a>, ancillary data and descriptor passing, TLS integration, happy-eyeballs dialing, kernel socket-buffer tuning, and portable reactor abstraction.</p>
+
+    <h2 id="glossary">Glossary</h2>
+    <table>
+      <thead><tr><th>Term</th><th>Course meaning</th></tr></thead>
+      <tbody>
+        <tr><td>File descriptor</td><td>A process-local integer handle referring to an open file description or kernel object.</td></tr>
+        <tr><td>Byte stream</td><td>An ordered sequence of bytes with no application message boundaries.</td></tr>
+        <tr><td>Framing</td><td>The application-layer mapping between a byte stream and messages.</td></tr>
+        <tr><td>Blocking</td><td>A call may wait before returning when progress is not immediately possible.</td></tr>
+        <tr><td>Nonblocking</td><td>A call reports would-block rather than waiting for progress.</td></tr>
+        <tr><td>Readiness</td><td>An indication that an I/O attempt is likely to make progress; it is not completion.</td></tr>
+        <tr><td>Backpressure</td><td>Limiting or admitting work so demand cannot grow without bound.</td></tr>
+      </tbody>
+    </table>
+
+    <h2 id="anchors">Primary anchors</h2>
+    <p><a href="https://pubs.opengroup.org/onlinepubs/9799919799/">POSIX.1-2024</a> | <a href="https://man7.org/linux/man-pages/man2/socket.2.html"><code>socket(2)</code></a> | <a href="https://man7.org/linux/man-pages/man7/socket.7.html"><code>socket(7)</code></a> | <a href="https://man7.org/linux/man-pages/man7/tcp.7.html"><code>tcp(7)</code></a> | <a href="https://man7.org/linux/man-pages/man7/epoll.7.html"><code>epoll(7)</code></a></p>
+
+    <nav class="lesson-nav" aria-label="Reference navigation">
+      <a href="../index.html">Course home</a>
+      <span><a href="../lessons/0007-socket-reality.html">Day 7</a> &middot; <a href="../lessons/0008-scale-the-event-loop.html">Day 8</a> &middot; <a href="../lessons/0009-cross-process-boundaries.html">Day 9</a></span>
+    </nav>
+  </main>
+</body>
+</html>

@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Day 14: integrated tests, sanitizers, benchmark, and scored technical mocks.">
+  <title>Day 14 — Prove readiness</title>
+  <link rel="stylesheet" href="../assets/course.css">
+  <script src="../assets/course.js" defer></script>
+</head>
+<body data-day="14" data-title="Prove readiness" data-duration="240">
+  <main class="shell lesson-shell">
+    <header class="masthead">
+      <a class="brand" href="../index.html">NetForge</a>
+      <span class="quiet">Day 14 of 14 · 240 minutes</span>
+    </header>
+
+    <article>
+      <section class="hero">
+        <p class="eyebrow">Integrate · measure · defend</p>
+        <h1>Prove readiness</h1>
+        <p class="lede">Finish with evidence, not confidence: every gate, separate sanitizer runs, a reproducible baseline, and two scored mock loops covering coding/oral reasoning and specialist system design.</p>
+        <div class="meta-row">
+          <span class="pill">Measurable win</span>
+          <span class="pill">Two mocks ≥ 80/100</span>
+          <span class="pill">No critical safety gap</span>
+        </div>
+      </section>
+
+      <section>
+        <h2>Your measurable win</h2>
+        <p>Produce a reviewable Day 14 evidence bundle: all tests green; ASan/UBSan and TSan clean; three comparable baseline runs; coding/oral and design scores each at least 80/100, with no zero and no unresolved memory-safety or data-race defect. Have a peer, mentor, or practicing engineer independently score at least one Day 13/14 mock; without that calibration, label the result self-assessed and provisional.</p>
+      </section>
+
+      <section>
+        <h2>Recall before notes <span class="quiet">10 min</span></h2>
+        <ol>
+          <li>State the design chain from requirement to trade-off.</li>
+          <li>State your chosen branch's hardest failure and observable signal.</li>
+          <li>Give one senior story's decision, rejected alternative, and result.</li>
+        </ol>
+        <details><summary>Check only after answering aloud</summary><p>Your answers must point to Day 13 evidence. If they rely on generic vocabulary, reopen the architecture, branch, or story artifact and retrieve again after a short delay.</p></details>
+      </section>
+
+      <section>
+        <h2>Compact mental model</h2>
+        <blockquote>Readiness is the intersection of correctness evidence, measured behavior, and clear reasoning under challenge.</blockquote>
+        <table>
+          <thead><tr><th>Claim</th><th>Required evidence</th><th>Cannot be substituted by</th></tr></thead>
+          <tbody>
+            <tr><td>Correct</td><td>Unit, stress, integration, abuse, recovery gates</td><td>One successful demo</td></tr>
+            <tr><td>Safe</td><td>Ownership proof plus clean ASan/UBSan and TSan paths</td><td>“Uses smart pointers”</td></tr>
+            <tr><td>Fast enough</td><td>Repeatable workload, environment, distribution/baseline</td><td>One elapsed-time number</td></tr>
+            <tr><td>Interview-ready</td><td>Timed implementation, oral defense, design, rubric</td><td>Recognizing prepared answers</td></tr>
+          </tbody>
+        </table>
+        <aside class="callout"><strong>Primary source.</strong> Use the official CMake <a href="https://cmake.org/cmake/help/latest/manual/ctest.1.html">CTest manual</a> to interpret selection, output, repeats, and exit status. The repository's <a href="../interview/SCORECARD.md">scorecard</a> defines the human evidence threshold.</aside>
+      </section>
+
+      <section>
+        <h2>Build → break → explain <span class="quiet">215 min</span></h2>
+        <ol class="flow">
+          <li><strong>Build.</strong> Run the complete matrix from a known revision.</li>
+          <li><strong>Break.</strong> Challenge failure paths and benchmark variance.</li>
+          <li><strong>Explain.</strong> Run two scored mocks without assistance.</li>
+        </ol>
+
+        <h3>Core lane</h3>
+        <table>
+          <thead><tr><th>Day 14 block</th><th>Minutes</th><th>Evidence</th></tr></thead>
+          <tbody>
+            <tr><td>Closed-book recall</td><td>10</td><td>Three spoken retrieval answers</td></tr>
+            <tr><td>Functional matrix and environment</td><td>55</td><td>All tests plus exact commands</td></tr>
+            <tr><td>Sanitizers and static analysis</td><td>35</td><td>Separate ASan/UBSan, TSan, and findings</td></tr>
+            <tr><td>Three benchmark baselines</td><td>20</td><td>Comparable runs and variance note</td></tr>
+            <tr><td>One coding/oral path</td><td>60</td><td>General drill plus oral, or low-latency screen plus defense</td></tr>
+            <tr><td>Specialist design mock</td><td>45</td><td>Recording and timestamped score</td></tr>
+            <tr><td>Debrief and proof gate</td><td>15</td><td>Risk gap, next experiment, checklist</td></tr>
+          </tbody>
+        </table>
+        <ol>
+          <li>Create the evidence directory and record compiler, OS/kernel, CPU, revision, and exact commands in <code>environment.txt</code>.</li>
+          <li>Run the full functional gate, then separate sanitizer trees. Stop on the first failure; preserve it before changing code.</li>
+        </ol>
+        <pre><code>mkdir -p capstone/work/evidence/day-14
+./scripts/check.sh work all \
+  | tee capstone/work/evidence/day-14/all-tests.txt
+
+cmake -S capstone -B build/work-asan -DNETFORGE_TRACK=work \
+  -DNETFORGE_SANITIZE_ADDRESS=ON -DCMAKE_BUILD_TYPE=Debug
+cmake --build build/work-asan --parallel
+ctest --test-dir build/work-asan --output-on-failure \
+  2&gt;&amp;1 | tee capstone/work/evidence/day-14/asan.txt
+
+cmake -S capstone -B build/work-tsan -DNETFORGE_TRACK=work \
+  -DNETFORGE_SANITIZE_THREAD=ON -DCMAKE_BUILD_TYPE=Debug
+cmake --build build/work-tsan --parallel
+ctest --test-dir build/work-tsan --output-on-failure \
+  2&gt;&amp;1 | tee capstone/work/evidence/day-14/tsan.txt
+
+./scripts/analyze.sh work \
+  2&gt;&amp;1 | tee capstone/work/evidence/day-14/clang-tidy.txt</code></pre>
+        <ol start="3">
+          <li>Run the settled baseline three times:</li>
+        </ol>
+        <pre><code>for run in 1 2 3; do
+  ./scripts/bench.sh work 1000 8
+done | tee capstone/work/evidence/day-14/benchmark.txt</code></pre>
+        <p>This is a baseline-only loopback workload over blocking persistent sessions with one request outstanding per session; it is not production server throughput. The C++ driver performs warmup and reports p50/p95/p99/max for measured request round trips without spawning a process per request. Its wall-rate still includes connection and warmup time. Record run-to-run variance and one hypothesis before tuning. Never discard a slow run without a stated environmental reason.</p>
+        <ol start="4">
+          <li><strong>Mock loop 1—choose one 60-minute coding/oral path.</strong> General path: complete the 25-minute Day 14 TTL-cache drill, then take 35 minutes of sockets/concurrency oral prompts from <a href="../interview/MOCK-ROUNDS.md#mock-b--concurrency-sockets-and-unix-75-min-day-10">Mock B</a>. Low-latency path: complete the <a href="../interview/quantiq-line-reversal/README.md">closed-book file line-reversal screen</a> and its five-minute memory/I/O defense. The published task and no-AI policy are employer-sourced; our timer, CLI, newline policy, tests, and thresholds are only local practice. Use no AI, notes, runner source, or reference implementation during either timer.</li>
+          <li><strong>Mock loop 2—design.</strong> Run one 45-minute specialist prompt from <a href="../interview/MOCK-ROUNDS.md#mock-d--choose-one-specialist-design-45-min-day-14">Mock D</a>. Score once as implementer and once as skeptical reviewer; keep the lower evidence-backed score.</li>
+          <li>Use <a href="../interview/SCORECARD.md">SCORECARD.md</a> and its fixed scoped-round normalization; omitted dimensions are unobserved, not zero. Both loops need 80/100, no zero in an included row, and no automatic no-pass condition. In <code>debrief.md</code>, record only strongest signal, highest-risk gap with evidence, and next experiment.</li>
+          <li>Give one uninterrupted Day 13/14 recording or live attempt to an independent scorer without showing your self-score. Share only clean-room course work; redact names, credentials, customer/employer material, private paths, and proprietary details. Save their timestamped rows under an alias or broad role label. If you opt out, write <code>status: self-assessed / provisional</code> in <code>debrief.md</code> and do not claim evidence-backed readiness.</li>
+        </ol>
+
+        <h3>Stretch lane</h3>
+        <p>Repeat one failed mock after a spaced break, invite a peer interviewer, and compare scores. Profile the benchmark before one targeted change, rerun under the same environment, and keep the change only if the causal claim survives correctness and sanitizer gates.</p>
+      </section>
+
+      <section class="quiz" data-quiz data-answer="a" data-correct="Correct. Readiness requires integrated evidence and passing mocks." data-incorrect="Not yet. A strong subsystem cannot average away a critical gap.">
+        <h2>One-question check</h2>
+        <p>Which bundle actually proves this sprint's readiness threshold?</p>
+        <label class="choice"><input type="radio" name="day14-quiz" value="a"> Tests pass, mocks clear threshold, with independent scoring.</label>
+        <label class="choice"><input type="radio" name="day14-quiz" value="b"> Benchmarks look fast, while sanitizer failures remain unresolved.</label>
+        <label class="choice"><input type="radio" name="day14-quiz" value="c"> Design sounds polished, though recovery testing remains incomplete.</label>
+        <button class="button secondary" type="button">Check answer</button>
+        <p class="feedback" aria-live="polite"></p>
+      </section>
+
+      <section>
+        <h2>Coding screen <span class="quiet">choose one 60 min path</span></h2>
+        <p><strong>General systems path:</strong> solve <a href="../interview/CODING-DRILLS.md#day-14--ttl-cache-then-defend-it">Day 14 — TTL cache, then defend it</a> with the 3/3/15/4-minute timer, then use the remaining 35 minutes for sockets/concurrency oral defense. Say first: “<code>get</code> never returns a value whose current generation is expired.” Save <code>drill.cpp</code> and the scorer's notes.</p>
+        <p><strong>Low-latency path:</strong> run the 60-minute <a href="../interview/quantiq-line-reversal/README.md">file line-reversal screen</a>. Save <code>answer.cpp</code>, deterministic results, repeated large-line time/RSS evidence, and <code>tradeoffs.md</code> under <code>capstone/work/evidence/day-14/quantiq-line-reversal/</code>. A fast run with incorrect bytes or an untrue memory claim does not pass.</p>
+      </section>
+
+      <section>
+        <h2>Interview drill <span class="quiet">two scored loops</span></h2>
+        <p>Before each loop, state assumptions and invite interruption. Afterward, answer one ownership challenge, one partial-I/O challenge, one data-race/deadlock challenge, one durability challenge, and one “what measurement changes your design?” challenge. Use <a href="../interview/QUESTION-BANK.md">QUESTION-BANK.md</a> only after the timed attempt.</p>
+      </section>
+
+      <section>
+        <h2>Proof gate <span class="quiet">15 min</span></h2>
+        <p>The authoritative bundle is <code>capstone/work/evidence/day-14/</code>: environment, commands, all-tests, ASan/UBSan, TSan, static analysis, benchmark, either <code>drill.cpp</code> plus oral notes or the line-reversal source/results/defense, two recordings/transcripts, two timestamped self-scorecards, one independent timestamped scorecard (or an explicit provisional-status declaration), and <code>debrief.md</code>.</p>
+        <ul class="checklist">
+          <li><label><input type="checkbox" data-check-id="day14-matrix"> Full tests and both separate sanitizer suites pass.</label></li>
+          <li><label><input type="checkbox" data-check-id="day14-analysis"> Static-analysis findings are fixed or dispositioned with evidence.</label></li>
+          <li><label><input type="checkbox" data-check-id="day14-benchmark"> Three comparable baseline runs and variance notes exist.</label></li>
+          <li><label><input type="checkbox" data-check-id="day14-mocks"> Coding/oral and design loops each score at least 80.</label></li>
+          <li><label><input type="checkbox" data-check-id="day14-independent"> One late-stage mock is independently scored, or my status is explicitly provisional.</label></li>
+          <li><label><input type="checkbox" data-check-id="day14-safety"> No zero, automatic no-pass, or unresolved safety defect remains.</label></li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>If you get stuck</h2>
+        <p><strong>20 minutes:</strong> preserve the failing artifact and name one score/gate. <strong>40:</strong> inspect only the matching reference guide or rubric row. <strong>60:</strong> compare the smallest relevant file in <code>capstone/reference/</code>, close it, reimplement, and rerun the original command. A near-threshold score is not a reason to hide a gap.</p>
+        <aside class="callout"><strong>Use your teacher.</strong> Ask the agent follow-ups with a failing command or timestamped score row and your proposed next experiment. The course is self-guiding; the agent remains available to challenge explanations and debug evidence.</aside>
+        <div class="actions"><button class="button" type="button" data-lesson-complete="day-14">Mark lesson complete</button></div>
+      </section>
+    </article>
+
+    <nav class="lesson-nav" aria-label="Lesson navigation">
+      <a href="0013-design-and-explain.html">← Day 13 · Design and explain</a>
+      <a href="../index.html">Return to course dashboard →</a>
+    </nav>
+  </main>
+</body>
+</html>

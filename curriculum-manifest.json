@@ -1,0 +1,1127 @@
+{
+  "schema_version": 1,
+  "course_id": "netforge-systems-cpp-14-day",
+  "title": "NetForge: C++ Systems and Networking Interview Sprint",
+  "total_minutes": 2430,
+  "atomic_block_policy": {
+    "minimum_minutes": 15,
+    "maximum_minutes": 45,
+    "counted_scope": "core",
+    "note": "Every listed block is core and counted toward its day duration. Optional stretch work stays outside this manifest so the published time budget remains honest."
+  },
+  "completion_policy": "A day is complete only when every core block is finished and the proof block's evidence exists. A passing command without retained evidence is not completion.",
+  "days": [
+    {
+      "id": "day-01",
+      "day": 1,
+      "title": "Own the bytes",
+      "lesson": "lessons/0001-own-the-bytes.html",
+      "duration_minutes": 150,
+      "requires": [],
+      "blocks": [
+        {
+          "id": "d01-b01",
+          "title": "Retrieve stream-I/O invariants",
+          "minutes": 15,
+          "mode": "recall",
+          "action": "Without notes, state how short reads, short writes, EINTR, EOF, declared length, and allocation order must be handled. Predict three boundary failures before opening the source.",
+          "evidence": "Closed-book answers in capstone/work/evidence/day-01/recall.md.",
+          "scope": "core"
+        },
+        {
+          "id": "d01-b02",
+          "title": "Run the practical baseline",
+          "minutes": 30,
+          "mode": "quiz",
+          "action": "Run scripts/diagnostic.sh from the red starter. Spend 20 minutes coding without help, then 10 minutes scoring the result and choosing the lower evidence-backed learning lane.",
+          "evidence": "Diagnostic output and lane decision in capstone/work/evidence/day-01/diagnostic.txt.",
+          "scope": "core"
+        },
+        {
+          "id": "d01-b03",
+          "title": "Model a bounded frame",
+          "minutes": 15,
+          "mode": "model",
+          "action": "Draw the stream-to-header-to-bounded-payload state machine and label every point at which progress, EOF, error, or rejection occurs.",
+          "evidence": "A frame-state sketch in capstone/work/evidence/day-01/frame-model.md.",
+          "scope": "core"
+        },
+        {
+          "id": "d01-b04",
+          "title": "Implement exact framed I/O",
+          "minutes": 45,
+          "mode": "build",
+          "action": "Implement the Day 1 TODOs in capstone/work/src/protocol.cpp: loop on progress, retry EINTR, distinguish EOF from error, decode byte order explicitly, and reject oversized lengths before allocation.",
+          "evidence": "Compiling protocol.cpp plus the Day 1 diff and test transcript.",
+          "scope": "core"
+        },
+        {
+          "id": "d01-b05",
+          "title": "Attack the frame boundary",
+          "minutes": 15,
+          "mode": "debug",
+          "action": "Exercise zero-byte EOF, a split header, a split payload, EINTR, and an oversized declaration; preserve the first failing input before fixing it.",
+          "evidence": "One red-to-green boundary case in capstone/work/evidence/day-01/boundary-case.txt.",
+          "scope": "core"
+        },
+        {
+          "id": "d01-b06",
+          "title": "Prove Day 1",
+          "minutes": 15,
+          "mode": "proof",
+          "action": "Run ./scripts/check.sh work day01 from a clean build and save the exact command, environment, and output.",
+          "evidence": "Passing output in capstone/work/evidence/day-01/all-tests.txt.",
+          "scope": "core"
+        },
+        {
+          "id": "d01-b07",
+          "title": "Record the learning delta",
+          "minutes": 15,
+          "mode": "record",
+          "action": "Write the evidence-backed learning delta and next spaced retrieval date in the Day 1 session summary. Create a Teach learning record only if the evidence demonstrates non-trivial understanding, corrects a misconception, confirms prior depth, or changes the mission.",
+          "evidence": "capstone/work/evidence/day-01/session-summary.md, plus an optional learning-records entry only when the Teach threshold is met.",
+          "scope": "core"
+        }
+      ]
+    },
+    {
+      "id": "day-02",
+      "day": 2,
+      "title": "Never leak a descriptor",
+      "lesson": "lessons/0002-never-leak-a-descriptor.html",
+      "duration_minutes": 150,
+      "requires": ["day-01"],
+      "blocks": [
+        {
+          "id": "d02-b01",
+          "title": "Retrieve ownership failure paths",
+          "minutes": 15,
+          "mode": "recall",
+          "action": "List every exit path around a manual close, name which generated special members violate unique ownership, and explain why destructors must not throw.",
+          "evidence": "Closed-book ownership answers in capstone/work/evidence/day-02/recall.md.",
+          "scope": "core"
+        },
+        {
+          "id": "d02-b02",
+          "title": "Model descriptor ownership",
+          "minutes": 15,
+          "mode": "model",
+          "action": "Draw a descriptor lifetime through create, move, release, reset, and destruction; mark exactly one owner at every transition.",
+          "evidence": "Ownership transition table in capstone/work/evidence/day-02/ownership-model.md.",
+          "scope": "core"
+        },
+        {
+          "id": "d02-b03",
+          "title": "Build unique_fd",
+          "minutes": 45,
+          "mode": "build",
+          "action": "Complete unique_fd.hpp with deleted copy operations, noexcept move construction and assignment, release, reset, and an explicit self-move policy.",
+          "evidence": "Compiling unique_fd.hpp and a focused Day 2 test transcript.",
+          "scope": "core"
+        },
+        {
+          "id": "d02-b04",
+          "title": "Break moves and cleanup",
+          "minutes": 15,
+          "mode": "debug",
+          "action": "Test move assignment over an owned destination, self-move, release, reset-to-same, and scope exit after an error; use fcntl with F_GETFD and EBADF to prove closure.",
+          "evidence": "Descriptor-liveness observations in capstone/work/evidence/day-02/failure-paths.txt.",
+          "scope": "core"
+        },
+        {
+          "id": "d02-b05",
+          "title": "Code an ownership-aware LRU",
+          "minutes": 30,
+          "mode": "quiz",
+          "action": "Complete the Day 2 LRU cache drill closed book, then annotate which container owns each node and which handles are non-owning.",
+          "evidence": "Timed LRU source and ownership annotation in capstone/work/evidence/day-02/.",
+          "scope": "core"
+        },
+        {
+          "id": "d02-b06",
+          "title": "Defend the RAII choice",
+          "minutes": 15,
+          "mode": "explain",
+          "action": "Record a two-minute answer to why shared_ptr<int> is the wrong socket abstraction, covering semantic ownership, release policy, cycles, and reference-count cost.",
+          "evidence": "Audio/video or transcript in capstone/work/evidence/day-02/raii-defense.*.",
+          "scope": "core"
+        },
+        {
+          "id": "d02-b07",
+          "title": "Prove and record Day 2",
+          "minutes": 15,
+          "mode": "proof",
+          "action": "Run ./scripts/check.sh work day02, retain the output, and record the move-assignment tradeoff and next retrieval date. Create a Teach learning record only if the evidence meets its non-trivial-learning threshold.",
+          "evidence": "Passing test output and capstone/work/evidence/day-02/session-summary.md; a Teach learning record is optional and evidence-gated.",
+          "scope": "core"
+        }
+      ]
+    },
+    {
+      "id": "day-03",
+      "day": 3,
+      "title": "Modern C++ interfaces",
+      "lesson": "lessons/0003-modern-cpp-interfaces.html",
+      "duration_minutes": 150,
+      "requires": ["day-01", "day-02"],
+      "blocks": [
+        {
+          "id": "d03-b01",
+          "title": "Retrieve vocabulary-type lifetimes",
+          "minutes": 15,
+          "mode": "recall",
+          "action": "Explain when string_view dangles, what optional expresses beyond a sentinel, when variant beats inheritance, and who owns every returned byte.",
+          "evidence": "Closed-book answers in capstone/work/evidence/day-03/recall.md.",
+          "scope": "core"
+        },
+        {
+          "id": "d03-b02",
+          "title": "Model explicit parse states",
+          "minutes": 15,
+          "mode": "model",
+          "action": "Map each command and malformed state to a concrete C++20 type; mark view lifetimes and the point where borrowed bytes must become owned.",
+          "evidence": "Parse-state and lifetime table in capstone/work/evidence/day-03/type-model.md.",
+          "scope": "core"
+        },
+        {
+          "id": "d03-b03",
+          "title": "Build bounded command parsing",
+          "minutes": 45,
+          "mode": "build",
+          "action": "Implement valid_key and parse_command for PING, STATS, SET, GET, and DEL while preserving spaces in SET values and returning explicit bounded errors.",
+          "evidence": "Compiling parser source and focused Day 3 tests.",
+          "scope": "core"
+        },
+        {
+          "id": "d03-b04",
+          "title": "Break views and malformed input",
+          "minutes": 15,
+          "mode": "debug",
+          "action": "Try empty input, unknown verbs, embedded NUL, extra arguments, invalid or 129-byte keys, empty values, and commands returned from temporary storage.",
+          "evidence": "A malformed-input matrix in capstone/work/evidence/day-03/parser-cases.md.",
+          "scope": "core"
+        },
+        {
+          "id": "d03-b05",
+          "title": "Code CIDR membership",
+          "minutes": 30,
+          "mode": "quiz",
+          "action": "Complete the Day 3 CIDR membership drill closed book, including /0, /32, invalid prefix lengths, and explicit byte order.",
+          "evidence": "Timed CIDR source and results in capstone/work/evidence/day-03/.",
+          "scope": "core"
+        },
+        {
+          "id": "d03-b06",
+          "title": "Defend the error boundary",
+          "minutes": 15,
+          "mode": "explain",
+          "action": "Compare variant, exceptions, error codes, and C++23 expected for this parser; choose based on boundary and recoverability rather than novelty.",
+          "evidence": "A two-minute recorded defense or transcript in capstone/work/evidence/day-03/error-policy.*.",
+          "scope": "core"
+        },
+        {
+          "id": "d03-b07",
+          "title": "Prove and record Day 3",
+          "minutes": 15,
+          "mode": "proof",
+          "action": "Run ./scripts/check.sh work day03, retain the output, and record one interface decision and next retrieval date. Create a Teach learning record only if the evidence meets its non-trivial-learning threshold.",
+          "evidence": "Passing test output and capstone/work/evidence/day-03/session-summary.md; a Teach learning record is optional and evidence-gated.",
+          "scope": "core"
+        }
+      ]
+    },
+    {
+      "id": "day-04",
+      "day": 4,
+      "title": "Make shared state boring",
+      "lesson": "lessons/0004-make-shared-state-boring.html",
+      "duration_minutes": 180,
+      "requires": ["day-02", "day-03"],
+      "blocks": [
+        {
+          "id": "d04-b01",
+          "title": "Retrieve memory-model facts",
+          "minutes": 15,
+          "mode": "recall",
+          "action": "Define a data race, state what a mutex protects, explain spurious wakeups, and name the predicate transition that must precede notification.",
+          "evidence": "Closed-book answers in capstone/work/evidence/day-04/recall.md.",
+          "scope": "core"
+        },
+        {
+          "id": "d04-b02",
+          "title": "Model invariant and predicate",
+          "minutes": 15,
+          "mode": "model",
+          "action": "Write the bounded-queue invariant in one sentence, then list the producer, consumer, and close predicates and every state transition that can wake them.",
+          "evidence": "Queue invariant table in capstone/work/evidence/day-04/queue-model.md.",
+          "scope": "core"
+        },
+        {
+          "id": "d04-b03",
+          "title": "Build the bounded queue",
+          "minutes": 45,
+          "mode": "build",
+          "action": "Implement BlockingQueue with finite capacity, one mutex, predicate waits, two condition variables, close, and drain semantics.",
+          "evidence": "Compiling queue implementation and focused queue tests.",
+          "scope": "core"
+        },
+        {
+          "id": "d04-b04",
+          "title": "Build the synchronized store",
+          "minutes": 30,
+          "mode": "build",
+          "action": "Implement KvStore with one documented synchronization invariant and no unsynchronized observations of mutable shared state.",
+          "evidence": "Compiling store implementation and its invariant comment.",
+          "scope": "core"
+        },
+        {
+          "id": "d04-b05",
+          "title": "Break close and capacity edges",
+          "minutes": 15,
+          "mode": "debug",
+          "action": "Test capacity one, close while a producer waits, close while a consumer waits, and close with queued items; loop the smallest stress case.",
+          "evidence": "Repeated stress output in capstone/work/evidence/day-04/stress.txt.",
+          "scope": "core"
+        },
+        {
+          "id": "d04-b06",
+          "title": "Code sliding-window maximum",
+          "minutes": 30,
+          "mode": "quiz",
+          "action": "Complete the Day 4 sliding-window maximum drill closed book, state the deque invariant, and cover duplicate values and window size one.",
+          "evidence": "Timed drill source and tests in capstone/work/evidence/day-04/.",
+          "scope": "core"
+        },
+        {
+          "id": "d04-b07",
+          "title": "Explain happens-before",
+          "minutes": 15,
+          "mode": "explain",
+          "action": "Draw and narrate the synchronizes-with and happens-before chain from producer mutation to consumer observation; explain why volatile cannot replace it.",
+          "evidence": "Recorded whiteboard or transcript in capstone/work/evidence/day-04/happens-before.*.",
+          "scope": "core"
+        },
+        {
+          "id": "d04-b08",
+          "title": "Prove and record Day 4",
+          "minutes": 15,
+          "mode": "proof",
+          "action": "Run ./scripts/check.sh work day04 repeatedly, retain output, and record the close-policy tradeoff. Create a Teach learning record only if the evidence meets its non-trivial-learning threshold.",
+          "evidence": "Passing repeated output and capstone/work/evidence/day-04/session-summary.md; a Teach learning record is optional and evidence-gated.",
+          "scope": "core"
+        }
+      ]
+    },
+    {
+      "id": "day-05",
+      "day": 5,
+      "title": "Threads with lifetimes",
+      "lesson": "lessons/0005-threads-with-lifetimes.html",
+      "duration_minutes": 180,
+      "requires": ["day-04"],
+      "blocks": [
+        {
+          "id": "d05-b01",
+          "title": "Retrieve thread lifetime rules",
+          "minutes": 15,
+          "mode": "recall",
+          "action": "State what happens when a joinable thread dies, which worker-visible objects must outlive workers, and why requesting stop does not interrupt every blocking syscall.",
+          "evidence": "Closed-book answers in capstone/work/evidence/day-05/recall.md.",
+          "scope": "core"
+        },
+        {
+          "id": "d05-b02",
+          "title": "Model accept-close-drain-join",
+          "minutes": 15,
+          "mode": "model",
+          "action": "Draw construction, task admission, shutdown, queue drain, worker exit, join, and member destruction in temporal order.",
+          "evidence": "Thread-lifetime sequence in capstone/work/evidence/day-05/lifetime-model.md.",
+          "scope": "core"
+        },
+        {
+          "id": "d05-b03",
+          "title": "Build bounded workers",
+          "minutes": 45,
+          "mode": "build",
+          "action": "Complete thread_pool.cpp with N workers, bounded admission, worker-boundary exception containment, drain semantics, idempotent shutdown, and join.",
+          "evidence": "Compiling pool implementation and focused Day 5 tests.",
+          "scope": "core"
+        },
+        {
+          "id": "d05-b04",
+          "title": "Measure task parallelism",
+          "minutes": 30,
+          "mode": "build",
+          "action": "Implement the bounded range partition in labs/parallelism/answer.cpp, run the checksum and scaling harness three times, and compare speedup, efficiency, Amdahl's ceiling, and adjacent-versus-padded counters without claiming causality from one run.",
+          "evidence": "Runner output and an Amdahl/false-sharing interpretation in capstone/work/evidence/day-05/parallelism.txt and parallelism.md.",
+          "scope": "core"
+        },
+        {
+          "id": "d05-b05",
+          "title": "Break admission and shutdown",
+          "minutes": 15,
+          "mode": "debug",
+          "action": "Exercise zero workers, capacity one, a throwing task, simultaneous submit and shutdown, double shutdown, and destruction with queued work.",
+          "evidence": "Smallest failing interleaving and final result in capstone/work/evidence/day-05/shutdown-cases.txt.",
+          "scope": "core"
+        },
+        {
+          "id": "d05-b06",
+          "title": "Code a timer heap",
+          "minutes": 30,
+          "mode": "quiz",
+          "action": "Complete the Day 5 timer-heap drill closed book, including equal deadlines, cancellation policy, and monotonic-clock reasoning.",
+          "evidence": "Timed timer-heap source and tests in capstone/work/evidence/day-05/.",
+          "scope": "core"
+        },
+        {
+          "id": "d05-b07",
+          "title": "Defend cancellation",
+          "minutes": 15,
+          "mode": "explain",
+          "action": "Compare tasks with threads, cooperative cancellation with forced interruption, and waking a queue wait with interrupting a client blocked in recv.",
+          "evidence": "Recorded answer or transcript in capstone/work/evidence/day-05/cancellation-defense.*.",
+          "scope": "core"
+        },
+        {
+          "id": "d05-b08",
+          "title": "Prove and record Day 5",
+          "minutes": 15,
+          "mode": "proof",
+          "action": "Run ./scripts/check.sh work day05 under repeated load, retain output, and record the shutdown-order decision. Create a Teach learning record only if the evidence meets its non-trivial-learning threshold.",
+          "evidence": "Passing load output and capstone/work/evidence/day-05/session-summary.md; a Teach learning record is optional and evidence-gated.",
+          "scope": "core"
+        }
+      ]
+    },
+    {
+      "id": "day-06",
+      "day": 6,
+      "title": "Read the wire",
+      "lesson": "lessons/0006-read-the-wire.html",
+      "duration_minutes": 150,
+      "requires": ["day-01", "day-03"],
+      "blocks": [
+        {
+          "id": "d06-b01",
+          "title": "Retrieve packet envelopes",
+          "minutes": 15,
+          "mode": "recall",
+          "action": "Draw Ethernet, optional 802.1Q, IPv4, and TCP in order; name the fields controlling the next offset, network byte order, and captured-versus-declared length checks.",
+          "evidence": "Closed-book packet drawing in capstone/work/evidence/day-06/recall.md.",
+          "scope": "core"
+        },
+        {
+          "id": "d06-b02",
+          "title": "Model validate-before-decode",
+          "minutes": 15,
+          "mode": "model",
+          "action": "Create an offset ledger where every read is preceded by both capture-bound and protocol-declaration checks.",
+          "evidence": "Offset ledger in capstone/work/evidence/day-06/offset-model.md.",
+          "scope": "core"
+        },
+        {
+          "id": "d06-b03",
+          "title": "Build the packet decoder",
+          "minutes": 45,
+          "mode": "build",
+          "action": "Implement hex parsing and decode_ethernet_ipv4_tcp with zero or one VLAN tag, explicit byte decoding, and precise bounded errors.",
+          "evidence": "Compiling packet.cpp and focused Day 6 tests.",
+          "scope": "core"
+        },
+        {
+          "id": "d06-b04",
+          "title": "Break every header boundary",
+          "minutes": 15,
+          "mode": "debug",
+          "action": "Truncate at each boundary and mutate EtherType, IP version, IHL, total length, protocol, TCP data offset, and VLAN fields.",
+          "evidence": "Packet mutation matrix in capstone/work/evidence/day-06/mutations.md.",
+          "scope": "core"
+        },
+        {
+          "id": "d06-b05",
+          "title": "Code longest-prefix routing",
+          "minutes": 30,
+          "mode": "quiz",
+          "action": "Complete the Day 6 longest-prefix route lookup closed book and test overlapping routes, the default route, host routes, and no match.",
+          "evidence": "Timed route-lookup source and tests in capstone/work/evidence/day-06/.",
+          "scope": "core"
+        },
+        {
+          "id": "d06-b06",
+          "title": "Trace one handshake",
+          "minutes": 15,
+          "mode": "explain",
+          "action": "Capture one loopback handshake with tcpdump on Linux or macOS and identify SYN, SYN-ACK, and ACK from flags, ports, and sequence behavior.",
+          "evidence": "Packet capture excerpt and annotated explanation in capstone/work/evidence/day-06/handshake.md.",
+          "scope": "core"
+        },
+        {
+          "id": "d06-b07",
+          "title": "Prove and record Day 6",
+          "minutes": 15,
+          "mode": "proof",
+          "action": "Run ./scripts/check.sh work day06, retain output, and record one validation-order decision. Create a Teach learning record only if the evidence meets its non-trivial-learning threshold.",
+          "evidence": "Passing output and capstone/work/evidence/day-06/session-summary.md; a Teach learning record is optional and evidence-gated.",
+          "scope": "core"
+        }
+      ]
+    },
+    {
+      "id": "day-07",
+      "day": 7,
+      "title": "Socket reality",
+      "lesson": "lessons/0007-socket-reality.html",
+      "duration_minutes": 180,
+      "requires": ["day-01", "day-02", "day-05", "day-06"],
+      "blocks": [
+        {
+          "id": "d07-b01",
+          "title": "Retrieve the socket lifecycle",
+          "minutes": 15,
+          "mode": "recall",
+          "action": "Order resolution, socket, bind, listen, accept, connect, framed transfer, shutdown, and close; distinguish listener ownership from connected ownership and EOF from reset, timeout, EINTR, and EAGAIN.",
+          "evidence": "Closed-book lifecycle in capstone/work/evidence/day-07/recall.md.",
+          "scope": "core"
+        },
+        {
+          "id": "d07-b02",
+          "title": "Build client and server lifecycle",
+          "minutes": 45,
+          "mode": "build",
+          "action": "Implement the highest-risk client.cpp and server.cpp paths: resolve, connect or bind/listen, ephemeral-port reporting, bounded accept, descriptor transfer, framed request/response, and clean stop.",
+          "evidence": "A working PING plus SET/GET transcript in capstone/work/evidence/day-07/session.txt.",
+          "scope": "core"
+        },
+        {
+          "id": "d07-b03",
+          "title": "Break socket failure paths",
+          "minutes": 15,
+          "mode": "debug",
+          "action": "Select the three riskiest cases from wrong port, bind conflict, mid-header close, oversized frame, slow payload, overload, and SIGINT; preserve errno at the failing boundary.",
+          "evidence": "Three bounded failure observations in capstone/work/evidence/day-07/socket-failures.md.",
+          "scope": "core"
+        },
+        {
+          "id": "d07-b04",
+          "title": "Reset before the mock",
+          "minutes": 15,
+          "mode": "break",
+          "action": "Leave the screen, hydrate, and return with no notes or source tabs except the Mock A fixture and timer.",
+          "evidence": "Break start and return timestamps in capstone/work/evidence/day-07/session-log.md.",
+          "scope": "core"
+        },
+        {
+          "id": "d07-b05",
+          "title": "Mock A: reproduce and localize",
+          "minutes": 30,
+          "mode": "mock",
+          "action": "Start the independent Mock A timer. Reproduce the deterministic frame faults, preserve the first failure, state one hypothesis, and localize the smallest responsible boundary without opening the solution track.",
+          "evidence": "First half of the uninterrupted 60-minute Mock A recording and investigation notes.",
+          "scope": "core"
+        },
+        {
+          "id": "d07-b06",
+          "title": "Mock A: repair, defend, and score",
+          "minutes": 30,
+          "mode": "mock",
+          "action": "Continue the same timer. Implement the smallest repair, rerun the fixture, explain ownership and stream semantics aloud, and score the attempt using the shared scorecard.",
+          "evidence": "Second half of the recording, passing fixture output, patch, and timestamped Mock A scorecard.",
+          "scope": "core"
+        },
+        {
+          "id": "d07-b07",
+          "title": "Prove the socket path",
+          "minutes": 15,
+          "mode": "proof",
+          "action": "Run ./scripts/check.sh work day07 from a fresh server and correlate one PING packet trace with connect, accept, request, response, and FIN application events.",
+          "evidence": "Passing Day 7 output and annotated trace in capstone/work/evidence/day-07/.",
+          "scope": "core"
+        },
+        {
+          "id": "d07-b08",
+          "title": "Record the midpoint decision",
+          "minutes": 15,
+          "mode": "record",
+          "action": "Record the lower evidence-backed Mock A score and choose the one failure mode to retrieve again on Days 8, 10, and 14. Create a Teach learning record only if the mock corrected or demonstrated non-trivial understanding.",
+          "evidence": "capstone/work/evidence/day-07/session-summary.md and a scheduled retrieval item; a Teach learning record is optional and evidence-gated.",
+          "scope": "core"
+        }
+      ]
+    },
+    {
+      "id": "day-08",
+      "day": 8,
+      "title": "Scale the event loop",
+      "lesson": "lessons/0008-scale-the-event-loop.html",
+      "duration_minutes": 180,
+      "requires": ["day-05", "day-07"],
+      "blocks": [
+        {
+          "id": "d08-b01",
+          "title": "Retrieve readiness semantics",
+          "minutes": 15,
+          "mode": "recall",
+          "action": "Explain why readiness is permission to attempt I/O rather than proof a frame will complete, then retrieve the Day 7 failure selected for spacing.",
+          "evidence": "Closed-book readiness answers in capstone/work/evidence/day-08/recall.md.",
+          "scope": "core"
+        },
+        {
+          "id": "d08-b02",
+          "title": "Model per-connection state",
+          "minutes": 15,
+          "mode": "model",
+          "action": "Draw listener, readable, writable, partial-frame, output-high-water, timeout, and close states for a persistent connection.",
+          "evidence": "Connection-state diagram in capstone/work/evidence/day-08/event-model.md.",
+          "scope": "core"
+        },
+        {
+          "id": "d08-b03",
+          "title": "Build bounded readiness behavior",
+          "minutes": 45,
+          "mode": "build",
+          "action": "Make listener readiness, repeated frames on one persistent connection, frame limits, and the chosen overload response explicit in the work track.",
+          "evidence": "Passing persistent-session tests and the corresponding source diff.",
+          "scope": "core"
+        },
+        {
+          "id": "d08-b04",
+          "title": "Reset before overload testing",
+          "minutes": 15,
+          "mode": "break",
+          "action": "Take a screen-free break, then return with the overload command and observation template ready.",
+          "evidence": "Break start and return timestamps in capstone/work/evidence/day-08/session-log.md.",
+          "scope": "core"
+        },
+        {
+          "id": "d08-b05",
+          "title": "Force bounded overload",
+          "minutes": 30,
+          "mode": "debug",
+          "action": "Hold more incomplete clients than the worker and queue capacity, run a PING during the hold, and record the bounded latency, rejection, or timeout your policy produces.",
+          "evidence": "Reproducible overload commands and timing in capstone/work/evidence/day-08/overload.txt.",
+          "scope": "core"
+        },
+        {
+          "id": "d08-b06",
+          "title": "Code a circular byte buffer",
+          "minutes": 30,
+          "mode": "quiz",
+          "action": "Complete the Day 8 circular-buffer drill closed book, including wraparound, empty/full distinction, and partial consume/append.",
+          "evidence": "Timed buffer source and tests in capstone/work/evidence/day-08/.",
+          "scope": "core"
+        },
+        {
+          "id": "d08-b07",
+          "title": "Explain the scaling alternative",
+          "minutes": 15,
+          "mode": "explain",
+          "action": "Write readiness.md comparing current worker ownership with a full reactor, including per-connection state, high/low-water marks, timeouts, and why the experiment is not a throughput benchmark.",
+          "evidence": "capstone/work/evidence/day-08/readiness.md.",
+          "scope": "core"
+        },
+        {
+          "id": "d08-b08",
+          "title": "Prove and record Day 8",
+          "minutes": 15,
+          "mode": "proof",
+          "action": "Run ./scripts/check.sh work day08, retain output, and record the overload-policy tradeoff. Create a Teach learning record only if the evidence meets its non-trivial-learning threshold.",
+          "evidence": "Passing output and capstone/work/evidence/day-08/session-summary.md; a Teach learning record is optional and evidence-gated.",
+          "scope": "core"
+        }
+      ]
+    },
+    {
+      "id": "day-09",
+      "day": 9,
+      "title": "Cross process boundaries",
+      "lesson": "lessons/0009-cross-process-boundaries.html",
+      "duration_minutes": 150,
+      "requires": ["day-01", "day-02", "day-07"],
+      "blocks": [
+        {
+          "id": "d09-b01",
+          "title": "Retrieve process-boundary ownership",
+          "minutes": 15,
+          "mode": "recall",
+          "action": "Explain which descriptors fork duplicates, why each process closes its unused endpoint immediately, and how EOF depends on all write-end owners closing.",
+          "evidence": "Closed-book IPC answers in capstone/work/evidence/day-09/recall.md.",
+          "scope": "core"
+        },
+        {
+          "id": "d09-b02",
+          "title": "Model parent-child framing",
+          "minutes": 15,
+          "mode": "model",
+          "action": "Draw socketpair creation, fork, endpoint closure, framed request, framed reply, shutdown, waitpid, and exit-status propagation.",
+          "evidence": "IPC lifetime diagram in capstone/work/evidence/day-09/ipc-model.md.",
+          "scope": "core"
+        },
+        {
+          "id": "d09-b03",
+          "title": "Build framed fork IPC",
+          "minutes": 45,
+          "mode": "build",
+          "action": "Build the Day 9 helper using socketpair, fork, existing framing, immediate unused-end closure, deterministic parent/child behavior, and waitpid status checks.",
+          "evidence": "Compiling day09-ipc and a successful round-trip transcript.",
+          "scope": "core"
+        },
+        {
+          "id": "d09-b04",
+          "title": "Break the tail and ownership",
+          "minutes": 15,
+          "mode": "debug",
+          "action": "Run the torn-child-frame case under a two-second timeout and prove it terminates rather than hanging because inherited endpoints were closed correctly.",
+          "evidence": "Timed break-tail result in capstone/work/evidence/day-09/break-tail.txt.",
+          "scope": "core"
+        },
+        {
+          "id": "d09-b05",
+          "title": "Code Top-K endpoints",
+          "minutes": 30,
+          "mode": "quiz",
+          "action": "Complete the Day 9 Top-K endpoint drill closed book, defining tie order, memory bound, and behavior when k exceeds the unique endpoint count.",
+          "evidence": "Timed Top-K source and tests in capstone/work/evidence/day-09/.",
+          "scope": "core"
+        },
+        {
+          "id": "d09-b06",
+          "title": "Defend IPC choices",
+          "minutes": 15,
+          "mode": "explain",
+          "action": "Compare socketpair with a pipe and shared memory for this framed exchange; include backpressure, ownership, serialization, and failure isolation.",
+          "evidence": "Recorded answer or transcript in capstone/work/evidence/day-09/ipc-defense.*.",
+          "scope": "core"
+        },
+        {
+          "id": "d09-b07",
+          "title": "Prove and record Day 9",
+          "minutes": 15,
+          "mode": "proof",
+          "action": "Run ./scripts/check.sh work day09 and both manual IPC commands, retain outputs, and record the process-boundary decision. Create a Teach learning record only if the evidence meets its non-trivial-learning threshold.",
+          "evidence": "Passing outputs and capstone/work/evidence/day-09/session-summary.md; a Teach learning record is optional and evidence-gated.",
+          "scope": "core"
+        }
+      ]
+    },
+    {
+      "id": "day-10",
+      "day": 10,
+      "title": "Debug under fire",
+      "lesson": "lessons/0010-debug-under-fire.html",
+      "duration_minutes": 180,
+      "requires": ["day-04", "day-05", "day-07", "day-09"],
+      "blocks": [
+        {
+          "id": "d10-b01",
+          "title": "Retrieve the evidence ladder",
+          "minutes": 15,
+          "mode": "recall",
+          "action": "Without notes, order reproduction, preserved inputs, debugger or trace, one hypothesis, sanitizer choice, profiler choice, minimal repair, and regression proof; retrieve the Day 7 spaced failure again.",
+          "evidence": "Closed-book debugging ladder in capstone/work/evidence/day-10/recall.md.",
+          "scope": "core"
+        },
+        {
+          "id": "d10-b02",
+          "title": "Localize the EBADF injection",
+          "minutes": 45,
+          "mode": "debug",
+          "action": "Reproduce the injected EBADF path, then run the disposable ASan use-after-free and TSan data-race fixtures. Freeze edits, preserve first reports, inspect the failing boundary, test one hypothesis per fault, and make the smallest repairs in evidence copies.",
+          "evidence": "Debugger transcript, rejected hypothesis, minimal EBADF patch, red/green ASan and TSan reports, and fixture diagnosis under capstone/work/evidence/day-10/.",
+          "scope": "core"
+        },
+        {
+          "id": "d10-b03",
+          "title": "Reset before clean builds",
+          "minutes": 15,
+          "mode": "break",
+          "action": "Take a screen-free break, then return with separate empty ASan/UBSan and TSan build directories.",
+          "evidence": "Break start and return timestamps in capstone/work/evidence/day-10/session-log.md.",
+          "scope": "core"
+        },
+        {
+          "id": "d10-b04",
+          "title": "Build independent analysis lanes",
+          "minutes": 30,
+          "mode": "build",
+          "action": "Run static analysis, then configure and execute ASan/UBSan and TSan in separate clean builds; never combine ASan and TSan into one result.",
+          "evidence": "Static-analysis, ASan/UBSan, and TSan logs in capstone/work/evidence/day-10/.",
+          "scope": "core"
+        },
+        {
+          "id": "d10-b05",
+          "title": "Test one profiler hypothesis",
+          "minutes": 15,
+          "mode": "debug",
+          "action": "State one CPU or contention hypothesis, collect the smallest relevant profiler observation, and write what result would disprove the claim.",
+          "evidence": "Profiler command, observation, and falsifier in capstone/work/evidence/day-10/profile.md.",
+          "scope": "core"
+        },
+        {
+          "id": "d10-b06",
+          "title": "Code a deadlock detector",
+          "minutes": 30,
+          "mode": "quiz",
+          "action": "Complete the Day 10 wait-for-graph cycle detector closed book and test disconnected graphs, a self-cycle, and multiple cycles.",
+          "evidence": "Timed detector source and tests in capstone/work/evidence/day-10/.",
+          "scope": "core"
+        },
+        {
+          "id": "d10-b07",
+          "title": "Run the incident oral",
+          "minutes": 15,
+          "mode": "explain",
+          "action": "Answer the shutdown-hang and later-CPU-spike prompt aloud, asking for missing evidence and naming observations that would reject the leading hypothesis.",
+          "evidence": "Recorded answer or transcript in capstone/work/evidence/day-10/incident-oral.*.",
+          "scope": "core"
+        },
+        {
+          "id": "d10-b08",
+          "title": "Prove and record Day 10",
+          "minutes": 15,
+          "mode": "proof",
+          "action": "Run ./scripts/check.sh work day10, retain all independent lanes, and record one diagnostic decision. Create a Teach learning record only if the evidence meets its non-trivial-learning threshold.",
+          "evidence": "Passing output and capstone/work/evidence/day-10/session-summary.md; a Teach learning record is optional and evidence-gated.",
+          "scope": "core"
+        }
+      ]
+    },
+    {
+      "id": "day-11",
+      "day": 11,
+      "title": "Persist and recover",
+      "lesson": "lessons/0011-persist-and-recover.html",
+      "duration_minutes": 180,
+      "requires": ["day-03", "day-07", "day-10"],
+      "blocks": [
+        {
+          "id": "d11-b01",
+          "title": "Retrieve durability boundaries",
+          "minutes": 15,
+          "mode": "recall",
+          "action": "Distinguish process buffers, kernel page cache, local stable storage, and NAS guarantees; state exactly when this server may acknowledge a mutation.",
+          "evidence": "Closed-book durability answers in capstone/work/evidence/day-11/recall.md.",
+          "scope": "core"
+        },
+        {
+          "id": "d11-b02",
+          "title": "Model write-ahead recovery",
+          "minutes": 15,
+          "mode": "model",
+          "action": "Draw append, checksum and length validation, required sync, acknowledgment, restart scan, valid-prefix replay, and corrupt-tail stop policy.",
+          "evidence": "WAL state machine in capstone/work/evidence/day-11/wal-model.md.",
+          "scope": "core"
+        },
+        {
+          "id": "d11-b03",
+          "title": "Build framed WAL append",
+          "minutes": 45,
+          "mode": "build",
+          "action": "Implement a bounded framed WAL record and append path that completes the required durability sync before success is returned.",
+          "evidence": "Compiling WAL append path and focused tests.",
+          "scope": "core"
+        },
+        {
+          "id": "d11-b04",
+          "title": "Build restart recovery",
+          "minutes": 30,
+          "mode": "build",
+          "action": "Implement restart scanning and deterministic valid-prefix recovery without trusting truncated lengths or corrupt records.",
+          "evidence": "Restarted SET/GET transcript and recovery test output.",
+          "scope": "core"
+        },
+        {
+          "id": "d11-b05",
+          "title": "Break the durable tail",
+          "minutes": 15,
+          "mode": "debug",
+          "action": "Inject a torn header, torn payload, oversized declaration, and corrupted record; verify bounded startup and the documented prefix policy.",
+          "evidence": "Recovery fault matrix in capstone/work/evidence/day-11/recovery-cases.md.",
+          "scope": "core"
+        },
+        {
+          "id": "d11-b06",
+          "title": "Code WAL compaction",
+          "minutes": 30,
+          "mode": "quiz",
+          "action": "Complete the Day 11 WAL compaction drill closed book, preserving the latest value per key and specifying crash-safe replacement order.",
+          "evidence": "Timed compaction source and tests in capstone/work/evidence/day-11/.",
+          "scope": "core"
+        },
+        {
+          "id": "d11-b07",
+          "title": "Defend the NAS boundary",
+          "minutes": 15,
+          "mode": "explain",
+          "action": "Explain where local fsync assumptions stop at an NFS or SMB boundary and which server, cache, failover, and fencing facts must be established before promising durability.",
+          "evidence": "Recorded answer or transcript in capstone/work/evidence/day-11/nas-boundary.*.",
+          "scope": "core"
+        },
+        {
+          "id": "d11-b08",
+          "title": "Prove and record Day 11",
+          "minutes": 15,
+          "mode": "proof",
+          "action": "Run ./scripts/check.sh work day11 plus a manual restart, retain output, and record the acknowledgment contract. Create a Teach learning record only if the evidence meets its non-trivial-learning threshold.",
+          "evidence": "Passing output and capstone/work/evidence/day-11/session-summary.md; a Teach learning record is optional and evidence-gated.",
+          "scope": "core"
+        }
+      ]
+    },
+    {
+      "id": "day-12",
+      "day": 12,
+      "title": "Harden the boundary",
+      "lesson": "lessons/0012-harden-the-boundary.html",
+      "duration_minutes": 180,
+      "requires": ["day-01", "day-06", "day-08", "day-10", "day-11"],
+      "blocks": [
+        {
+          "id": "d12-b01",
+          "title": "Retrieve hostile-boundary rules",
+          "minutes": 15,
+          "mode": "recall",
+          "action": "List byte, time, work, queue, and state limits; explain why declared lengths are rejected before allocation and why parser acceptance is not authorization.",
+          "evidence": "Closed-book boundary rules in capstone/work/evidence/day-12/recall.md.",
+          "scope": "core"
+        },
+        {
+          "id": "d12-b02",
+          "title": "Model the abuse budget",
+          "minutes": 15,
+          "mode": "model",
+          "action": "Map each untrusted input to its validation, resource budget, timeout, state transition, log signal, and rejection behavior.",
+          "evidence": "Abuse-budget table in capstone/work/evidence/day-12/boundary-model.md.",
+          "scope": "core"
+        },
+        {
+          "id": "d12-b03",
+          "title": "Build boundary limits",
+          "minutes": 45,
+          "mode": "build",
+          "action": "Enforce protocol byte limits, connection and work bounds, timeout policy, valid state transitions, and safe error reporting at the earliest trusted boundary.",
+          "evidence": "Compiling hardened path and focused Day 12 tests.",
+          "scope": "core"
+        },
+        {
+          "id": "d12-b04",
+          "title": "Build a fuzzable parser target",
+          "minutes": 30,
+          "mode": "build",
+          "action": "Compile the provided parser fuzz target with a bounded corpus and deterministic resource limits, keeping the command reproducible.",
+          "evidence": "Fuzz target command and seed corpus under capstone/work/evidence/day-12/corpus/.",
+          "scope": "core"
+        },
+        {
+          "id": "d12-b05",
+          "title": "Minimize one hostile input",
+          "minutes": 15,
+          "mode": "debug",
+          "action": "Run the target, preserve any crash or timeout, minimize one interesting input, and add it as a named regression even if the code already rejects it.",
+          "evidence": "Minimized input and regression result in capstone/work/evidence/day-12/.",
+          "scope": "core"
+        },
+        {
+          "id": "d12-b06",
+          "title": "Code a safe varint",
+          "minutes": 30,
+          "mode": "quiz",
+          "action": "Complete the Day 12 variable-length integer drill closed book, covering truncation, overflow, excessive continuation bytes, and non-canonical encodings.",
+          "evidence": "Timed varint source and tests in capstone/work/evidence/day-12/.",
+          "scope": "core"
+        },
+        {
+          "id": "d12-b07",
+          "title": "Explain layered containment",
+          "minutes": 15,
+          "mode": "explain",
+          "action": "Walk one hostile frame from admission through parsing, work scheduling, storage, logging, and response; name the independent limit at each layer.",
+          "evidence": "Recorded threat walk or transcript in capstone/work/evidence/day-12/containment.*.",
+          "scope": "core"
+        },
+        {
+          "id": "d12-b08",
+          "title": "Prove and record Day 12",
+          "minutes": 15,
+          "mode": "proof",
+          "action": "Run ./scripts/check.sh work day12 plus ASan/UBSan, retain the fuzz result, and record one rejection-policy tradeoff. Create a Teach learning record only if the evidence meets its non-trivial-learning threshold.",
+          "evidence": "Passing outputs and capstone/work/evidence/day-12/session-summary.md; a Teach learning record is optional and evidence-gated.",
+          "scope": "core"
+        }
+      ]
+    },
+    {
+      "id": "day-13",
+      "day": 13,
+      "title": "Design and explain",
+      "lesson": "lessons/0013-design-and-explain.html",
+      "duration_minutes": 180,
+      "requires": ["day-04", "day-05", "day-07", "day-08", "day-11", "day-12"],
+      "blocks": [
+        {
+          "id": "d13-b01",
+          "title": "Retrieve system-design anchors",
+          "minutes": 15,
+          "mode": "recall",
+          "action": "Without notes, retrieve requirements, capacity math, invariants, flow, overload, consistency, recovery, observability, and one explicit tradeoff for the selected specialist branch.",
+          "evidence": "Closed-book design skeleton in capstone/work/evidence/day-13/recall.md.",
+          "scope": "core"
+        },
+        {
+          "id": "d13-b02",
+          "title": "Build the branch design packet",
+          "minutes": 30,
+          "mode": "build",
+          "action": "Choose secure networking, NAS/file protocols, L2/L3 control and data plane, Unix/payments IPC, or low latency. Write requirements, back-of-envelope math, invariants, failure domains, and one request flow before recording.",
+          "evidence": "Branch design packet in capstone/work/evidence/day-13/design-packet.md.",
+          "scope": "core"
+        },
+        {
+          "id": "d13-b03",
+          "title": "Record Mock C",
+          "minutes": 45,
+          "mode": "mock",
+          "action": "Run one uninterrupted visible-timer Mock C attempt, using the base prompt and adapting only the final five minutes to the selected specialist branch. Do not consult notes or AI.",
+          "evidence": "Uninterrupted recording or transcript plus timestamped Mock C scorecard.",
+          "scope": "core"
+        },
+        {
+          "id": "d13-b04",
+          "title": "Reset before coding",
+          "minutes": 15,
+          "mode": "break",
+          "action": "Leave the screen, hydrate, and return with only the Day 13 coding prompt and timer visible.",
+          "evidence": "Break start and return timestamps in capstone/work/evidence/day-13/session-log.md.",
+          "scope": "core"
+        },
+        {
+          "id": "d13-b05",
+          "title": "Code failure-domain placement",
+          "minutes": 30,
+          "mode": "quiz",
+          "action": "Complete the Day 13 placement drill closed book, enforce capacity and anti-affinity, and explain what happens when constraints cannot all be satisfied.",
+          "evidence": "Timed placement source and tests in capstone/work/evidence/day-13/.",
+          "scope": "core"
+        },
+        {
+          "id": "d13-b06",
+          "title": "Repair the weakest design branch",
+          "minutes": 15,
+          "mode": "explain",
+          "action": "Review the lower evidence-backed Mock C subscores and re-explain only the weakest branch, naming the missing measurement or failure policy.",
+          "evidence": "Focused re-explanation in capstone/work/evidence/day-13/debrief.md.",
+          "scope": "core"
+        },
+        {
+          "id": "d13-b07",
+          "title": "Prove the design packet",
+          "minutes": 15,
+          "mode": "proof",
+          "action": "Verify that requirements, math, invariants, overload, failure domains, recovery, and observable signals are all present and linked to the Mock C scorecard.",
+          "evidence": "Completed Day 13 proof checklist in capstone/work/evidence/day-13/proof.md.",
+          "scope": "core"
+        },
+        {
+          "id": "d13-b08",
+          "title": "Record the readiness risk",
+          "minutes": 15,
+          "mode": "record",
+          "action": "Record exactly one evidence-backed design risk for the Day 14 debrief. Create a Teach learning record only if the design evidence demonstrates or corrects non-trivial understanding.",
+          "evidence": "capstone/work/evidence/day-13/session-summary.md with the named readiness risk; a Teach learning record is optional and evidence-gated.",
+          "scope": "core"
+        }
+      ]
+    },
+    {
+      "id": "day-14",
+      "day": 14,
+      "title": "Prove readiness",
+      "lesson": "lessons/0014-prove-readiness.html",
+      "duration_minutes": 240,
+      "requires": ["day-01", "day-02", "day-03", "day-04", "day-05", "day-06", "day-07", "day-08", "day-09", "day-10", "day-11", "day-12", "day-13"],
+      "blocks": [
+        {
+          "id": "d14-b01",
+          "title": "Retrieve three readiness risks",
+          "minutes": 15,
+          "mode": "recall",
+          "action": "Speak three closed-book answers: one ownership failure, one concurrency shutdown failure, and the Day 13 specialist-design risk. State the observable proof that would clear each risk.",
+          "evidence": "Three spoken answers or transcript in capstone/work/evidence/day-14/recall.*.",
+          "scope": "core"
+        },
+        {
+          "id": "d14-b02",
+          "title": "Run the clean correctness matrix",
+          "minutes": 30,
+          "mode": "build",
+          "action": "From a known revision, run the full work-track build and CTest matrix with finite timeouts, then preserve the exact environment and commands.",
+          "evidence": "Environment, revision, commands, and all-tests log in capstone/work/evidence/day-14/.",
+          "scope": "core"
+        },
+        {
+          "id": "d14-b03",
+          "title": "Run independent analysis lanes",
+          "minutes": 30,
+          "mode": "debug",
+          "action": "Run ASan/UBSan, TSan, and static analysis in their documented clean lanes; stop and classify any failure instead of treating partial success as readiness.",
+          "evidence": "Separate ASan/UBSan, TSan, and static-analysis logs in capstone/work/evidence/day-14/.",
+          "scope": "core"
+        },
+        {
+          "id": "d14-b04",
+          "title": "Establish the latency baseline",
+          "minutes": 15,
+          "mode": "build",
+          "action": "Use the persistent-session benchmark driver for three comparable runs with a warmup; record p50, p95, p99, maximum, environment, and a variance note without making a causal claim.",
+          "evidence": "Three-run benchmark.txt and variance note in capstone/work/evidence/day-14/.",
+          "scope": "core"
+        },
+        {
+          "id": "d14-b05",
+          "title": "Mock 1: implement under timer",
+          "minutes": 30,
+          "mode": "mock",
+          "action": "Start one uninterrupted 60-minute no-aid timer. Choose the general path and implement the TTL cache, or choose the low-latency path and implement the exact file line-reversal task without reading runner source or reference code.",
+          "evidence": "First half of the Mock 1 recording and the timed source tree.",
+          "scope": "core"
+        },
+        {
+          "id": "d14-b06",
+          "title": "Mock 1: test, defend, and score",
+          "minutes": 30,
+          "mode": "mock",
+          "action": "Continue the same timer. Run allowed black-box tests, handle boundary cases, give the sockets/concurrency oral or memory-and-I/O defense, then complete one timestamped scorecard.",
+          "evidence": "Second half of the recording, results, defense notes, and evidence-backed Mock 1 scorecard.",
+          "scope": "core"
+        },
+        {
+          "id": "d14-b07",
+          "title": "Mock 2: specialist system design",
+          "minutes": 45,
+          "mode": "mock",
+          "action": "Run one uninterrupted Mock D specialist prompt with no aid. Score it once as implementer and once as skeptical reviewer, retain the lower score, and mark self-assessed results provisional unless an independent interviewer scores them.",
+          "evidence": "Mock 2 recording or transcript plus two timestamped scorecards and the retained lower score.",
+          "scope": "core"
+        },
+        {
+          "id": "d14-b08",
+          "title": "Audit the proof bundle",
+          "minutes": 15,
+          "mode": "proof",
+          "action": "Check that correctness, sanitizers, static analysis, benchmark, selected coding path, two recordings, two scorecards, and debrief artifacts exist; do not pass a gate on confidence alone.",
+          "evidence": "Completed authoritative checklist in capstone/work/evidence/day-14/proof.md.",
+          "scope": "core"
+        },
+        {
+          "id": "d14-b09",
+          "title": "Record the honest readiness verdict",
+          "minutes": 30,
+          "mode": "record",
+          "action": "Write debrief.md. Normalize each score only to its scoped rubric, keep self-scored mocks provisional, name the top residual risk, and schedule a peer-scored repeat after a spaced break if either loop is below 80 or lacks independent scoring. Create a Teach learning record only if the evidence meets its non-trivial-learning threshold.",
+          "evidence": "debrief.md and a dated peer-repeat plan when required; a Teach learning record is optional and evidence-gated.",
+          "scope": "core"
+        }
+      ]
+    }
+  ]
+}

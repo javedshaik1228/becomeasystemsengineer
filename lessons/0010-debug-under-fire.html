@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Day 10: evidence-first debugging with debuggers, traces, sanitizers, and perf.">
+  <title>Day 10 — Debug under fire</title>
+  <link rel="stylesheet" href="../assets/course.css">
+  <script src="../assets/course.js" defer></script>
+</head>
+<body data-day="10" data-title="Debug under fire" data-duration="180">
+  <main class="shell lesson-shell">
+    <header class="masthead">
+      <a class="brand" href="../index.html">NetForge</a>
+      <span class="quiet">Day 10 of 14 · 180 minutes</span>
+    </header>
+
+    <article>
+      <section class="hero">
+        <p class="eyebrow">Reproduce · localize · prove</p>
+        <h1>Debug under fire</h1>
+        <p class="lede">Replace guesswork with a preserved failure, one hypothesis, and the tool that can falsify it. You will capture a debugger/core view, syscall trace, sanitizer runs, static analysis, and a performance baseline.</p>
+        <div class="meta-row">
+          <span class="pill">Measurable win</span>
+          <span class="pill">Four evidence types</span>
+          <span class="pill">Core 160 min · Stretch 20 min</span>
+        </div>
+      </section>
+
+      <section>
+        <h2>Your measurable win</h2>
+        <p>Diagnose the injected <code>EBADF</code> path and two disposable sanitizer faults from evidence, keep ASan/UBSan and TSan in separate clean builds, and write one profiler hypothesis whose conclusion distinguishes measurement from speculation.</p>
+      </section>
+
+      <section>
+        <h2>Recall before notes <span class="quiet">10 min</span></h2>
+        <ol>
+          <li>After <code>fork</code>, why can an unused writer prevent EOF?</li>
+          <li>What synchronization contract must shared memory add?</li>
+          <li>Which process owns unlinking a named IPC object after a crash?</li>
+        </ol>
+        <details><summary>Check only after answering aloud</summary><p>Every inherited writer reference counts. Shared bytes need publication order and synchronization. Cleanup ownership must be explicit, often with creator ownership plus stale-object recovery.</p></details>
+      </section>
+
+      <section>
+        <h2>Compact mental model</h2>
+        <ol class="flow">
+          <li>Reproduce one stable failure.</li>
+          <li>Preserve inputs, build, logs, and timing.</li>
+          <li>Localize the failing layer.</li>
+          <li>State one falsifiable hypothesis.</li>
+          <li>Measure with the narrowest tool.</li>
+          <li>Fix, regress, and record.</li>
+        </ol>
+        <table>
+          <thead><tr><th>Question</th><th>Tool</th><th>Useful evidence</th></tr></thead>
+          <tbody>
+            <tr><td>Where did it stop or crash?</td><td>GDB / LLDB / core</td><td>Threads, frames, locals, owners</td></tr>
+            <tr><td>Which kernel contract failed?</td><td><code>strace</code> / <code>dtruss</code></td><td>Call, arguments, errno, ordering</td></tr>
+            <tr><td>Is memory/concurrency unsafe?</td><td>ASan/UBSan / TSan</td><td>First report and allocation/thread stacks</td></tr>
+            <tr><td>Which suspicious path exists before runtime?</td><td><code>clang-tidy</code></td><td>Analyzer finding, source path, reviewed disposition</td></tr>
+            <tr><td>Where is measured cost?</td><td><code>perf</code> / Instruments</td><td>Baseline, counters/samples, changed variable</td></tr>
+          </tbody>
+        </table>
+        <aside class="callout"><strong>Primary sources.</strong> Use the official <a href="https://sourceware.org/gdb/current/onlinedocs/gdb.html">GDB manual</a> for breakpoint, thread, backtrace, and core-file semantics and the <a href="https://clang.llvm.org/extra/clang-tidy/">clang-tidy manual</a> for check and compile-database behavior. The local <a href="../reference/0005-debugging-performance.html">debugging field guide</a> maps equivalent LLDB and performance commands.</aside>
+      </section>
+
+      <section>
+        <h2>Build → break → explain <span class="quiet">120 min</span></h2>
+        <ol class="flow">
+          <li><strong>Build.</strong> Preserve errno and establish clean baselines.</li>
+          <li><strong>Break.</strong> Observe injected syscall and isolated faults.</li>
+          <li><strong>Explain.</strong> Turn evidence into one causal chain.</li>
+        </ol>
+
+        <h3>Core lane</h3>
+        <ol>
+          <li>Create <code>capstone/work/evidence/day-10/</code>, then run <code>./scripts/check.sh work day10</code>. In <code>capstone/work/src/protocol.cpp</code>, ensure every failed syscall captures <code>errno</code> before any later library call can overwrite it.</li>
+          <li>Debug the test's intentional invalid descriptor. Break on <code>netforge::read_exact</code>, run Day 10, step through the failed read, inspect <code>errno</code>, list threads, and save a core:</li>
+        </ol>
+        <pre><code>mkdir -p capstone/work/evidence/day-10
+gdb --args build/work/netforge-tests day10
+(gdb) set logging file capstone/work/evidence/day-10/debugger.txt
+(gdb) set logging enabled on
+(gdb) break netforge::read_exact
+(gdb) run
+(gdb) next
+(gdb) print errno
+(gdb) info threads
+(gdb) bt
+(gdb) generate-core-file capstone/work/evidence/day-10/day10.core</code></pre>
+        <p class="quiet">macOS LLDB: <code>breakpoint set -n netforge::read_exact</code>, <code>run</code>, <code>thread backtrace all</code>, and <code>process save-core ...</code>.</p>
+        <ol start="3">
+          <li>Capture the kernel view and a repeatable cost baseline:</li>
+        </ol>
+        <pre><code>strace -f -e trace=read,write,network,fsync \
+  -o capstone/work/evidence/day-10/strace.txt \
+  build/work/netforge-tests day10
+perf stat -o capstone/work/evidence/day-10/perf-stat.txt \
+  build/work/netforge-tests day10</code></pre>
+        <p class="quiet">macOS: use Instruments Time Profiler; use <code>dtruss</code> only if your local permissions permit it.</p>
+        <ol start="4">
+          <li>Configure separate sanitizer trees; never combine ASan and TSan:</li>
+        </ol>
+        <pre><code>cmake -S capstone -B build/work-asan -DNETFORGE_TRACK=work \
+  -DNETFORGE_SANITIZE_ADDRESS=ON -DCMAKE_BUILD_TYPE=Debug
+cmake --build build/work-asan --parallel
+ctest --test-dir build/work-asan --output-on-failure \
+  2&gt;&amp;1 | tee capstone/work/evidence/day-10/asan.txt
+
+cmake -S capstone -B build/work-tsan -DNETFORGE_TRACK=work \
+  -DNETFORGE_SANITIZE_THREAD=ON -DCMAKE_BUILD_TYPE=Debug
+cmake --build build/work-tsan --parallel
+ctest --test-dir build/work-tsan --output-on-failure \
+  2&gt;&amp;1 | tee capstone/work/evidence/day-10/tsan.txt</code></pre>
+        <ol start="5">
+          <li>Run the repository's auditable static-analysis profile. Preserve every diagnostic and classify it as fixed, justified with an invariant, or deferred with risk:</li>
+        </ol>
+        <pre><code>./scripts/analyze.sh work \
+  2&gt;&amp;1 | tee capstone/work/evidence/day-10/clang-tidy.txt</code></pre>
+        <ol start="6">
+          <li>Create <code>diagnosis.md</code>: observation → hypothesis → tool/command → evidence → conclusion → regression. A clean sanitizer or analyzer run is evidence only for the configured checks and executed paths.</li>
+        </ol>
+
+        <h3>Core sanitizer microfaults</h3>
+        <p>Run the two disposable <a href="../interview/fixtures/day10/README.md">Day 10 sanitizer fixtures</a>: one use-after-free under ASan/UBSan and one plain-counter race under TSan. Capture the <em>first</em> report, fix a copy under the evidence directory, and prove the report disappears. Do not inject either fault into NetForge production files.</p>
+      </section>
+
+      <section class="quiz" data-quiz data-answer="b" data-correct="Correct. Stable reproduction and preserved evidence come before edits." data-incorrect="Not yet. Choose the action that can falsify one causal hypothesis.">
+        <h2>One-question check</h2>
+        <p>What is the strongest first move during a production-style failure?</p>
+        <label class="choice"><input type="radio" name="day10-quiz" value="a"> Change several suspect functions before collecting any trace.</label>
+        <label class="choice"><input type="radio" name="day10-quiz" value="b"> Reproduce once, preserve evidence, then test one hypothesis.</label>
+        <label class="choice"><input type="radio" name="day10-quiz" value="c"> Optimize the hottest function before confirming the failure.</label>
+        <button class="button secondary" type="button">Check answer</button>
+        <p class="feedback" aria-live="polite"></p>
+      </section>
+
+      <section>
+        <h2>Coding drill <span class="quiet">25 min, closed book</span></h2>
+        <p>Solve <a href="../interview/CODING-DRILLS.md#day-10--deadlock-cycle-detector">Day 10 — Deadlock cycle detector</a>. Use the 3/3/15/4-minute timer.</p>
+        <p><strong>Say first:</strong> “Gray nodes are exactly the current DFS ancestry.” <strong>Target:</strong> O(V+E) time and space. Test a self-loop, disconnected graph, acyclic diamond, and long cycle; save <code>drill.cpp</code> under Day 10 evidence.</p>
+      </section>
+
+      <section>
+        <h2>Interview drill <span class="quiet">15 min</span></h2>
+        <p>Prompt: “The server sometimes hangs during shutdown and CPU later spikes.” Ask for reproduction rate, load, build, recent changes, and available artifacts. Name the first debugger, trace, sanitizer, and profiler observation you want—and what result would disprove your leading hypothesis.</p>
+      </section>
+
+      <section>
+        <h2>Proof gate <span class="quiet">10 min</span></h2>
+        <pre><code>mkdir -p capstone/work/evidence/day-10
+./scripts/check.sh work day10 | tee capstone/work/evidence/day-10/check.txt
+# Save debugger.txt (or a core + commands), strace.txt/perf-stat.txt,
+# asan.txt, tsan.txt, clang-tidy.txt, diagnosis.md, and drill.cpp here.</code></pre>
+        <ul class="checklist">
+          <li><label><input type="checkbox" data-check-id="day10-debugger"> Debugger/core evidence identifies the invalid descriptor path.</label></li>
+          <li><label><input type="checkbox" data-check-id="day10-tools"> Syscall, sanitizer, and performance evidence is saved.</label></li>
+          <li><label><input type="checkbox" data-check-id="day10-static"> Static-analysis findings are fixed or dispositioned with evidence.</label></li>
+          <li><label><input type="checkbox" data-check-id="day10-chain"> Diagnosis separates observation, hypothesis, and conclusion.</label></li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>If you get stuck</h2>
+        <p><strong>20 minutes:</strong> freeze edits and write the exact command, build, and first failure. <strong>40:</strong> consult the local tool-selection table. <strong>60:</strong> compare only the smallest matching function in <code>capstone/reference/</code>, close it, retry, and record the changed model.</p>
+        <aside class="callout"><strong>Use your teacher.</strong> Ask the agent follow-ups with the command, first relevant stack/trace lines, and one hypothesis. Do not paste only the last error line; causal context matters.</aside>
+        <div class="actions"><button class="button" type="button" data-lesson-complete="day-10">Mark lesson complete</button></div>
+      </section>
+    </article>
+
+    <nav class="lesson-nav" aria-label="Lesson navigation">
+      <a href="0009-cross-process-boundaries.html">← Day 09 · Process boundaries</a>
+      <a href="0011-persist-and-recover.html">Day 11 · Persist and recover →</a>
+    </nav>
+  </main>
+</body>
+</html>

@@ -1,0 +1,161 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "NetForge: Doctor",
+      "type": "shell",
+      "command": "bash",
+      "args": [
+        "${workspaceFolder}/scripts/doctor.sh"
+      ],
+      "problemMatcher": [],
+      "presentation": {
+        "clear": true,
+        "panel": "dedicated",
+        "reveal": "always"
+      }
+    },
+    {
+      "label": "NetForge: Configure work",
+      "type": "shell",
+      "command": "cmake",
+      "args": [
+        "-S",
+        "${workspaceFolder}/capstone",
+        "-B",
+        "${workspaceFolder}/build/vscode-work",
+        "-DNETFORGE_TRACK=work",
+        "-DCMAKE_BUILD_TYPE=Debug",
+        "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON"
+      ],
+      "problemMatcher": []
+    },
+    {
+      "label": "NetForge: Build work",
+      "type": "shell",
+      "command": "cmake",
+      "args": [
+        "--build",
+        "${workspaceFolder}/build/vscode-work",
+        "--parallel"
+      ],
+      "dependsOn": "NetForge: Configure work",
+      "dependsOrder": "sequence",
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "problemMatcher": [
+        "$gcc"
+      ],
+      "presentation": {
+        "clear": true,
+        "panel": "dedicated",
+        "reveal": "silent"
+      }
+    },
+    {
+      "label": "NetForge: Test work (all)",
+      "type": "shell",
+      "command": "ctest",
+      "args": [
+        "--test-dir",
+        "${workspaceFolder}/build/vscode-work",
+        "--output-on-failure",
+        "--no-tests=error"
+      ],
+      "dependsOn": "NetForge: Build work",
+      "dependsOrder": "sequence",
+      "group": {
+        "kind": "test",
+        "isDefault": true
+      },
+      "problemMatcher": [],
+      "presentation": {
+        "clear": true,
+        "panel": "dedicated",
+        "reveal": "always"
+      }
+    },
+    {
+      "label": "NetForge: Check selected track/day",
+      "type": "shell",
+      "command": "bash",
+      "args": [
+        "${workspaceFolder}/scripts/check.sh",
+        "${input:netforgeTrack}",
+        "${input:netforgeTestRegex}"
+      ],
+      "problemMatcher": [],
+      "presentation": {
+        "clear": true,
+        "panel": "dedicated",
+        "reveal": "always"
+      }
+    },
+    {
+      "label": "NetForge: Check course content",
+      "type": "shell",
+      "command": "node",
+      "args": [
+        "${workspaceFolder}/scripts/check-content.mjs"
+      ],
+      "problemMatcher": [],
+      "presentation": {
+        "clear": true,
+        "panel": "dedicated",
+        "reveal": "always"
+      }
+    },
+    {
+      "label": "NetForge: Static analyze work",
+      "type": "shell",
+      "command": "bash",
+      "args": [
+        "${workspaceFolder}/scripts/analyze.sh",
+        "work"
+      ],
+      "problemMatcher": [
+        "$gcc"
+      ],
+      "presentation": {
+        "clear": true,
+        "panel": "dedicated",
+        "reveal": "always"
+      }
+    },
+    {
+      "label": "NetForge: Serve course",
+      "type": "shell",
+      "command": "bash",
+      "args": [
+        "${workspaceFolder}/scripts/serve.sh",
+        "8000"
+      ],
+      "problemMatcher": [],
+      "presentation": {
+        "clear": true,
+        "panel": "dedicated",
+        "reveal": "always"
+      }
+    }
+  ],
+  "inputs": [
+    {
+      "id": "netforgeTrack",
+      "type": "pickString",
+      "description": "Capstone track",
+      "default": "work",
+      "options": [
+        "work",
+        "reference"
+      ]
+    },
+    {
+      "id": "netforgeTestRegex",
+      "type": "promptString",
+      "description": "all, a day number, day-NN, or a CTest name regex",
+      "default": "all"
+    }
+  ]
+}

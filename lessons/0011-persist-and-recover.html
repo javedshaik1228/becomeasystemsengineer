@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Day 11: write-ahead logging, fsync, restart recovery, and NAS semantics.">
+  <title>Day 11 — Persist and recover</title>
+  <link rel="stylesheet" href="../assets/course.css">
+  <script src="../assets/course.js" defer></script>
+</head>
+<body data-day="11" data-title="Persist and recover" data-duration="180">
+  <main class="shell lesson-shell">
+    <header class="masthead">
+      <a class="brand" href="../index.html">NetForge</a>
+      <span class="quiet">Day 11 of 14 · 180 minutes</span>
+    </header>
+
+    <article>
+      <section class="hero">
+        <p class="eyebrow">WAL · durability · replay</p>
+        <h1>Persist and recover</h1>
+        <p class="lede">Move an acknowledged mutation from volatile memory into a stated durability contract. Build a framed write-ahead log, recover after restart, and explain where local-file promises stop at a NAS boundary.</p>
+        <div class="meta-row">
+          <span class="pill">Measurable win</span>
+          <span class="pill">Crash-safe replay gate</span>
+          <span class="pill">Core 155 min · Stretch 25 min</span>
+        </div>
+      </section>
+
+      <section>
+        <h2>Your measurable win</h2>
+        <p>Pass the torn-tail recovery test and show that NetForge acknowledges <code>SET</code>/<code>DEL</code> only after a valid WAL record reaches the durability point you explicitly promise.</p>
+      </section>
+
+      <section>
+        <h2>Recall before notes <span class="quiet">10 min</span></h2>
+        <ol>
+          <li>Why must <code>errno</code> be captured immediately after failure?</li>
+          <li>What can a clean ASan run establish—and not establish?</li>
+          <li>Which artifact distinguishes a profiler hypothesis from a guess?</li>
+        </ol>
+        <details><summary>Check only after answering aloud</summary><p>Later calls can overwrite <code>errno</code>. ASan covers only executed, instrumented paths. A preserved baseline, controlled change, and comparable measurement make a performance conclusion defensible.</p></details>
+      </section>
+
+      <section>
+        <h2>Compact mental model</h2>
+        <blockquote>Write intent durably, then mutate memory, then acknowledge; replay repeats only complete valid intent.</blockquote>
+        <ol class="flow">
+          <li>Frame a deterministic mutation record.</li>
+          <li>Append every byte or fail.</li>
+          <li>Synchronize to the promised durability boundary.</li>
+          <li>Apply memory state and acknowledge.</li>
+          <li>On restart, replay complete records in order.</li>
+        </ol>
+        <table>
+          <thead><tr><th>Event</th><th>Recovery rule</th><th>Client-visible promise</th></tr></thead>
+          <tbody>
+            <tr><td>Crash before complete record</td><td>Ignore one torn final record</td><td>Mutation was not acknowledged</td></tr>
+            <tr><td>Crash after durability sync</td><td>Replay the complete record</td><td>Acknowledged mutation returns</td></tr>
+            <tr><td>Malformed complete record</td><td>Stop and report corruption</td><td>Never silently invent state</td></tr>
+          </tbody>
+        </table>
+        <p><code>write</code> can stop at the page cache. <code>fsync</code> asks the local filesystem/device stack to persist the file's data and required metadata, subject to its contract. Creation and rename can require syncing the containing directory. NFS stable writes/COMMIT and SMB durable handles, leases, caching, and failover introduce different client/server promises; learn the semantics and diagnostic questions, not imaginary two-week mastery.</p>
+        <aside class="callout"><strong>Primary source.</strong> Read return values, errors, and directory caveats in Linux <a href="https://man7.org/linux/man-pages/man2/fsync.2.html"><code>fsync(2)</code></a>. Use the local <a href="../reference/0006-storage-reliability.html">storage and reliability guide</a> for the bounded NFS/SMB comparison.</aside>
+      </section>
+
+      <section>
+        <h2>Build → break → explain <span class="quiet">115 min</span></h2>
+        <ol class="flow">
+          <li><strong>Build.</strong> Append framed intent and sync before success.</li>
+          <li><strong>Break.</strong> Leave a torn record and restart.</li>
+          <li><strong>Explain.</strong> Trace acknowledgement through storage layers.</li>
+        </ol>
+
+        <h3>Core lane</h3>
+        <ol>
+          <li>Open <code>capstone/work/src/wal.cpp</code>. In the constructor, create parent directories, open the log <code>O_CREAT | O_APPEND | O_WRONLY | O_CLOEXEC</code> with owner-only permissions, and let <code>enabled()</code> reflect descriptor ownership.</li>
+          <li>Implement <code>append_set</code>/<code>append_del</code> as deterministic command records. In <code>append_record</code>, reuse NetForge framing, loop on partial writes and <code>EINTR</code>, and return success only after <code>fsync</code>.</li>
+          <li>Implement <code>recover</code>: open read-only, decode bounded frame lengths, replay only <code>SET</code>/<code>DEL</code> in order, accept EOF at a torn final header/body, and reject a complete malformed record.</li>
+          <li>Run <code>./scripts/check.sh work day11</code>. Read the test after your first attempt: it appends a two-byte torn tail and checks deterministic state.</li>
+          <li>Run a manual restart using a fixed WAL path:</li>
+        </ol>
+        <pre><code>build/work/netforge-server 9091 capstone/work/evidence/day-11/manual.wal
+# another terminal
+build/work/netforge-client 127.0.0.1 9091 SET durable yes
+# stop with Ctrl-C, restart the same command, then:
+build/work/netforge-client 127.0.0.1 9091 GET durable</code></pre>
+        <ol start="6">
+          <li>Write <code>io-path.md</code>: application → WAL bytes → page cache → <code>fsync</code> → device/filesystem promise → ACK. Add a second row for an NFS/SMB client and mark each unknown contract instead of guessing.</li>
+        </ol>
+
+        <h3>Stretch lane</h3>
+        <p>Add record version, sequence number, and checksum to your design note; do not silently change the fixed test format. Describe group commit, snapshot/compaction cutover, writer serialization, directory sync, and recovery after corruption in the middle rather than at the tail.</p>
+      </section>
+
+      <section class="quiz" data-quiz data-answer="c" data-correct="Correct. The acknowledgement follows the promised durability synchronization." data-incorrect="Not yet. Distinguish process buffers, record identity, and stable storage.">
+        <h2>One-question check</h2>
+        <p>When may this lesson's durable mutation be acknowledged?</p>
+        <label class="choice"><input type="radio" name="day11-quiz" value="a"> Acknowledge after bytes enter the process output buffer.</label>
+        <label class="choice"><input type="radio" name="day11-quiz" value="b"> Acknowledge after each record receives a sequence number.</label>
+        <label class="choice"><input type="radio" name="day11-quiz" value="c"> Acknowledge after record write and required durability sync.</label>
+        <button class="button secondary" type="button">Check answer</button>
+        <p class="feedback" aria-live="polite"></p>
+      </section>
+
+      <section>
+        <h2>Coding drill <span class="quiet">25 min, closed book</span></h2>
+        <p>Solve <a href="../interview/CODING-DRILLS.md#day-11--wal-compaction">Day 11 — WAL compaction</a> with the 3/3/15/4-minute timer.</p>
+        <p><strong>Say first:</strong> “Replaying the compacted log yields exactly the same final key/value map.” <strong>Target:</strong> O(n + m log m), where <code>m</code> is the number of live keys. Save <code>drill.cpp</code> under Day 11 evidence.</p>
+      </section>
+
+      <section>
+        <h2>Interview drill <span class="quiet">15 min</span></h2>
+        <p>Prompt: “A client received OK, but its value disappeared after power loss.” Walk the acknowledgement timeline, buffering layers, <code>fsync</code> errors, filesystem/device contract, concurrent writers, and recovery log. Then explain which questions change when the WAL is on NFS or exposed through SMB.</p>
+      </section>
+
+      <section>
+        <h2>Proof gate <span class="quiet">10 min</span></h2>
+        <pre><code>mkdir -p capstone/work/evidence/day-11
+./scripts/check.sh work day11 | tee capstone/work/evidence/day-11/check.txt
+# Save manual restart output, io-path.md, and drill.cpp here.</code></pre>
+        <ul class="checklist">
+          <li><label><input type="checkbox" data-check-id="day11-recovery"> Complete records replay; one torn final record is ignored.</label></li>
+          <li><label><input type="checkbox" data-check-id="day11-order"> WAL sync precedes in-memory mutation acknowledgement.</label></li>
+          <li><label><input type="checkbox" data-check-id="day11-nas"> I can separate local durability from NAS protocol promises.</label></li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>If you get stuck</h2>
+        <p><strong>20 minutes:</strong> record the byte offset, syscall result, and expected state. <strong>40:</strong> inspect the WAL timeline in the local guide. <strong>60:</strong> compare only <code>capstone/reference/src/wal.cpp</code>, close it, and reimplement from memory. Write what changed.</p>
+        <aside class="callout"><strong>Use your teacher.</strong> Ask the agent follow-ups with a hex/offset observation and the exact durability promise you intended. Distinguish “test passes” from “the contract is correct.”</aside>
+        <div class="actions"><button class="button" type="button" data-lesson-complete="day-11">Mark lesson complete</button></div>
+      </section>
+    </article>
+
+    <nav class="lesson-nav" aria-label="Lesson navigation">
+      <a href="0010-debug-under-fire.html">← Day 10 · Debug under fire</a>
+      <a href="0012-harden-the-boundary.html">Day 12 · Harden the boundary →</a>
+    </nav>
+  </main>
+</body>
+</html>

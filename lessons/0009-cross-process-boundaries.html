@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Day 9: Unix sockets, pipes, shared memory, and process ownership.">
+  <title>Day 09 — Cross process boundaries</title>
+  <link rel="stylesheet" href="../assets/course.css">
+  <script src="../assets/course.js" defer></script>
+</head>
+<body data-day="09" data-title="Cross process boundaries" data-duration="150">
+  <main class="shell lesson-shell">
+    <header class="masthead">
+      <a class="brand" href="../index.html">NetForge</a>
+      <span class="quiet">Day 09 of 14 · 150 minutes</span>
+    </header>
+
+    <article>
+      <section class="hero">
+        <p class="eyebrow">IPC · inheritance · lifecycle</p>
+        <h1>Cross process boundaries</h1>
+        <p class="lede">Reuse NetForge framing across a real process boundary, close inherited endpoints deliberately, and choose Unix sockets, pipes, or shared memory by contract—not speed folklore.</p>
+        <div class="meta-row">
+          <span class="pill">Measurable win</span>
+          <span class="pill">Forked IPC round trip</span>
+          <span class="pill">Core 125 min · Stretch 25 min</span>
+        </div>
+      </section>
+
+      <section>
+        <h2>Your measurable win</h2>
+        <p>Complete one framed parent/child Unix-socket round trip, survive a child that exits mid-frame, and produce an ownership map that names who closes every endpoint.</p>
+      </section>
+
+      <section>
+        <h2>Recall before notes <span class="quiet">10 min</span></h2>
+        <ol>
+          <li>Why does readiness not promise a complete frame?</li>
+          <li>What policy stops pending output from growing forever?</li>
+          <li>What does <code>EAGAIN</code> mean for retained parse state?</li>
+        </ol>
+        <details><summary>Check only after answering aloud</summary><p>Readiness permits one non-blocking attempt. High/low-water marks and rejection bound work. <code>EAGAIN</code> keeps the partial cursor and returns control to the event mechanism.</p></details>
+      </section>
+
+      <section>
+        <h2>Compact mental model</h2>
+        <blockquote>An IPC mechanism moves bytes; an ownership protocol makes process failure survivable.</blockquote>
+        <table>
+          <thead><tr><th>Mechanism</th><th>Natural contract</th><th>Hidden cost</th></tr></thead>
+          <tbody>
+            <tr><td>Pipe</td><td>One-way byte stream, simple parent/child flow</td><td>Two pipes for duplex; inherited writers delay EOF</td></tr>
+            <tr><td>Unix socket</td><td>Duplex framed control channel; local peer identity</td><td>Still a stream; framing and backpressure remain</td></tr>
+            <tr><td>Shared memory</td><td>Shared bytes with minimal copying</td><td>No message, synchronization, ownership, or recovery semantics</td></tr>
+          </tbody>
+        </table>
+        <p>After <code>fork</code>, both processes inherit both socketpair endpoints. EOF appears only after <em>every</em> writer reference closes. Shared memory replaces copying with coordination: atomics or process-shared synchronization, publication order, crash cleanup, and versioning become your job.</p>
+        <aside class="callout"><strong>Primary source.</strong> Read the creation, descriptor, and protocol contract in POSIX <a href="https://pubs.opengroup.org/onlinepubs/9799919799/functions/socketpair.html"><code>socketpair()</code></a>. Use the local <a href="../reference/0003-posix-io-sockets.html#ipc">IPC comparison</a> for pipes and shared memory.</aside>
+      </section>
+
+      <section>
+        <h2>Build → break → explain <span class="quiet">85 min</span></h2>
+        <ol class="flow">
+          <li><strong>Build.</strong> Send one framed request across <code>fork</code>.</li>
+          <li><strong>Break.</strong> Exit the child halfway through a frame.</li>
+          <li><strong>Explain.</strong> Draw descriptors, owners, and cleanup.</li>
+        </ol>
+
+        <h3>Core lane</h3>
+        <ol>
+          <li>Run <code>./scripts/check.sh work day09</code>; this proves the framing API works over an <code>AF_UNIX</code> socketpair.</li>
+          <li>Create <code>capstone/work/experiments/day09_ipc.cpp</code>. Call <code>socketpair(AF_UNIX, SOCK_STREAM, 0, pair)</code>, then <code>fork()</code>.</li>
+          <li>Immediately after the fork, parent closes/releases the child endpoint; child closes/releases the parent endpoint. Wrap each retained descriptor in <code>UniqueFd</code>.</li>
+          <li>Parent sends <code>control</code> with <code>send_frame</code>. Child receives it, replies <code>ACK control</code>, and exits with <code>_exit</code>. Parent receives, calls <code>waitpid</code>, and reports both protocol and exit status.</li>
+          <li>Add a <code>--break-tail</code> mode: child writes a valid length plus only part of its body, then exits. Parent must report EOF/truncation and must not hang.</li>
+        </ol>
+        <pre><code>mkdir -p capstone/work/experiments
+c++ -std=c++20 -pthread -Icapstone/work/include \
+  capstone/work/experiments/day09_ipc.cpp capstone/work/src/protocol.cpp \
+  -o build/work/day09-ipc
+build/work/day09-ipc
+timeout 2 build/work/day09-ipc --break-tail</code></pre>
+        <p class="quiet">macOS: use <code>perl -e 'alarm 2; exec @ARGV' ...</code> if GNU <code>timeout</code> is unavailable.</p>
+        <ol start="6">
+          <li>Draw <code>ownership.md</code> with rows for parent/child, both descriptors before and after fork, normal close, crash close, and who unlinks any named IPC object.</li>
+          <li>Explain why framing transfers cleanly from TCP, while trust and lifecycle assumptions do not.</li>
+        </ol>
+
+        <h3>Stretch lane</h3>
+        <p>Sketch the same control message over two pipes and a payload ring over <code>shm_open</code>/<code>mmap</code>. Name the publication happens-before edge, full/empty rule, process-crash behavior, permissions, version field, and unlink owner. Do not place an ordinary <code>std::mutex</code> in shared memory.</p>
+      </section>
+
+      <section class="quiz" data-quiz data-answer="a" data-correct="Correct. Closing unused inherited references makes EOF and ownership deterministic." data-incorrect="Not yet. Count every inherited reference that can keep the stream alive.">
+        <h2>One-question check</h2>
+        <p>What should happen immediately after a successful fork?</p>
+        <label class="choice"><input type="radio" name="day09-quiz" value="a"> Each process closes its unused inherited endpoint immediately.</label>
+        <label class="choice"><input type="radio" name="day09-quiz" value="b"> Both processes retain every inherited endpoint until shutdown.</label>
+        <label class="choice"><input type="radio" name="day09-quiz" value="c"> Only child closes endpoints after each completed message.</label>
+        <button class="button secondary" type="button">Check answer</button>
+        <p class="feedback" aria-live="polite"></p>
+      </section>
+
+      <section>
+        <h2>Coding drill <span class="quiet">25 min, closed book</span></h2>
+        <p>Solve <a href="../interview/CODING-DRILLS.md#day-09--top-k-endpoints">Day 09 — Top-K endpoints</a>. Use the 3/3/15/4-minute timer and test ties explicitly.</p>
+        <p><strong>Say first:</strong> “The heap contains the best <code>k</code> aggregated endpoints seen under one final comparator.” <strong>Target:</strong> O(n log k) time and O(k) heap space, plus endpoint aggregation. Save <code>drill.cpp</code> in the Day 09 evidence directory.</p>
+      </section>
+
+      <section>
+        <h2>Interview drill <span class="quiet">15 min</span></h2>
+        <p>Choose an IPC mechanism for a high-rate data path plus a low-rate control path. Clarify process topology and failure requirements; compare copy cost, framing, flow control, synchronization, credential/permission checks, cleanup, restart, debugging, and portability. A strong answer may choose two mechanisms.</p>
+      </section>
+
+      <section>
+        <h2>Proof gate <span class="quiet">10 min</span></h2>
+        <pre><code>mkdir -p capstone/work/evidence/day-09
+./scripts/check.sh work day09 | tee capstone/work/evidence/day-09/check.txt
+build/work/day09-ipc | tee capstone/work/evidence/day-09/round-trip.txt
+timeout 2 build/work/day09-ipc --break-tail \
+  | tee capstone/work/evidence/day-09/torn-frame.txt
+# Save ownership.md and drill.cpp beside these files.</code></pre>
+        <ul class="checklist">
+          <li><label><input type="checkbox" data-check-id="day09-roundtrip"> Parent/child framed round trip succeeds.</label></li>
+          <li><label><input type="checkbox" data-check-id="day09-failure"> Mid-frame exit terminates without a hang.</label></li>
+          <li><label><input type="checkbox" data-check-id="day09-ownership"> Every descriptor and named object has one cleanup owner.</label></li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>If you get stuck</h2>
+        <p><strong>20 minutes:</strong> record which process is blocked and which endpoints remain open. <strong>40:</strong> inspect the local IPC table. <strong>60:</strong> compare only the Day 09 test and the matching framing functions in <code>capstone/reference/</code>, then close them and retry.</p>
+        <aside class="callout"><strong>Use your teacher.</strong> Ask the agent follow-ups with your descriptor map, process states, and smallest failing mode. “It hangs” is less useful than “parent blocks in body read while child still owns endpoint 1.”</aside>
+        <div class="actions"><button class="button" type="button" data-lesson-complete="day-09">Mark lesson complete</button></div>
+      </section>
+    </article>
+
+    <nav class="lesson-nav" aria-label="Lesson navigation">
+      <a href="0008-scale-the-event-loop.html">← Day 08 · Event loop</a>
+      <a href="0010-debug-under-fire.html">Day 10 · Debug under fire →</a>
+    </nav>
+  </main>
+</body>
+</html>

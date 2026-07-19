@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="A printable field guide to Ethernet, IP, TCP, UDP, packet parsing, routing, and network security vocabulary.">
+  <title>Networking Protocols | NetForge</title>
+  <link rel="stylesheet" href="../assets/course.css">
+</head>
+<body>
+  <main class="shell lesson-shell">
+    <header class="masthead">
+      <a class="brand" href="../index.html">NetForge</a>
+      <span class="quiet">Reference 04 / 07</span>
+    </header>
+
+    <section class="hero">
+      <p class="eyebrow">Printable field guide</p>
+      <h1>Networking protocols</h1>
+      <p class="lede">Follow a packet one boundary at a time: identify the layer, validate lengths, explain the state, and predict the next observable event.</p>
+      <div class="meta-row">
+        <span class="pill">Core: Days 6, 7, 12</span>
+        <span class="pill">Stretch: Day 13</span>
+        <span class="pill">Packet reasoning</span>
+      </div>
+    </section>
+
+    <aside class="callout"><strong>Mission fit.</strong> You should be able to inspect a short capture or byte buffer and narrate Ethernet/IP/TCP or UDP behavior, including byte order, state, failure, and which tool would confirm the hypothesis.</aside>
+    <aside class="callout warning"><strong>Two-week boundary.</strong> Core is packet-path reasoning and safe parsing. VLAN/STP, OSPF/BGP, EVPN/VXLAN, IPsec, ASIC pipelines, and vendor NOS internals are specialist stretch areas. This sprint builds vocabulary and a map, not protocol implementation mastery.</aside>
+
+    <h2 id="path">Packet path map</h2>
+    <table>
+      <thead><tr><th>Boundary</th><th>Core job</th><th>Identifiers/state</th><th>Failure clues</th></tr></thead>
+      <tbody>
+        <tr><td>L2: Ethernet / ARP</td><td>Deliver a frame on the local link; resolve next-hop IPv4 address to MAC</td><td>MAC, EtherType, ARP cache</td><td>Wrong VLAN, unresolved neighbor, frame errors</td></tr>
+        <tr><td>L3: IP / ICMP</td><td>Route a datagram across networks; report selected errors</td><td>IP addresses, prefix, TTL/hop limit, protocol/next-header</td><td>No route, TTL exhausted, fragmentation/PMTU issue</td></tr>
+        <tr><td>L4: TCP</td><td>Reliable ordered byte stream with flow and congestion control</td><td>4-tuple, sequence/ack numbers, windows, connection state</td><td>RST, retransmission, zero window, handshake timeout</td></tr>
+        <tr><td>L4: UDP</td><td>Best-effort datagrams with preserved message boundaries</td><td>4-tuple, datagram length, checksum</td><td>Loss, reordering, ICMP error, truncation</td></tr>
+        <tr><td>Application / TLS</td><td>Define messages; optionally authenticate and protect them</td><td>Framing, request ID, TLS session/keys</td><td>Protocol error, timeout, certificate/handshake failure</td></tr>
+      </tbody>
+    </table>
+    <p><a href="https://www.rfc-editor.org/rfc/rfc791.html">IPv4</a>, <a href="https://www.rfc-editor.org/rfc/rfc8200.html">IPv6</a>, <a href="https://www.rfc-editor.org/rfc/rfc826.html">ARP</a>, and <a href="https://www.rfc-editor.org/rfc/rfc792.html">ICMP</a> are the primary anchors. RFC diagrams show wire fields; your code still has to validate captured length before reading them.</p>
+
+    <h2 id="parse">Safe packet parsing</h2>
+    <ol class="flow">
+      <li><strong>Bound.</strong><br>Check captured bytes for the smallest header.</li>
+      <li><strong>Decode.</strong><br>Read fields without unaligned or aliasing-unsafe casts.</li>
+      <li><strong>Validate.</strong><br>Version, header length, total length, options, next protocol.</li>
+      <li><strong>Advance.</strong><br>Use checked offsets and lengths; stop on truncation.</li>
+    </ol>
+
+    <pre><code>std::optional&lt;std::uint16_t&gt; read_be16(
+    std::span&lt;const std::byte&gt; bytes, std::size_t offset) {
+  if (offset &gt; bytes.size() || bytes.size() - offset &lt; 2) return std::nullopt;
+  const auto hi = std::to_integer&lt;std::uint16_t&gt;(bytes[offset]);
+  const auto lo = std::to_integer&lt;std::uint16_t&gt;(bytes[offset + 1]);
+  return static_cast&lt;std::uint16_t&gt;((hi &lt;&lt; 8) | lo);
+}</code></pre>
+
+    <p>Network byte order is big-endian. Avoid overlaying a C++ struct on packet bytes: padding, alignment, object lifetime, aliasing, and host byte order make it brittle. Validate arithmetic as <code>available - offset &gt;= needed</code> after proving <code>offset &lt;= available</code>, avoiding overflow in <code>offset + needed</code>.</p>
+
+    <h2 id="tcp">TCP reasoning sheet</h2>
+    <p>The current core TCP specification is <a href="https://www.rfc-editor.org/rfc/rfc9293.html">RFC 9293</a>. TCP establishes synchronized sequence spaces, acknowledges bytes, retransmits when delivery evidence is missing, preserves order to the application, and applies both receiver flow control and network congestion control.</p>
+    <table>
+      <thead><tr><th>Concept</th><th>What to say</th><th>What not to imply</th></tr></thead>
+      <tbody>
+        <tr><td>Three-way handshake</td><td>SYN, SYN-ACK, ACK synchronize initial sequence numbers and establish state in both endpoints</td><td>It does not authenticate the peer or negotiate application framing</td></tr>
+        <tr><td>Sequence / ACK</td><td>Sequence numbers identify byte positions; cumulative ACK commonly identifies the next expected byte</td><td>One ACK is not one application message</td></tr>
+        <tr><td>Flow control</td><td>Receiver window prevents overrunning the receiver's advertised capacity</td><td>It is not congestion control</td></tr>
+        <tr><td>Congestion control</td><td>Sender adapts in-flight data to inferred network capacity</td><td>It cannot fix application-level unbounded queues</td></tr>
+        <tr><td>FIN / half-close</td><td>One direction can reach EOF while the other still sends</td><td><code>close()</code> is not an application-level delivery acknowledgement</td></tr>
+        <tr><td>RST</td><td>Abortive reset invalidates the connection state</td><td>It does not identify the root cause by itself</td></tr>
+        <tr><td>TIME_WAIT</td><td>The active closer retains state to handle delayed segments and reliable close</td><td>It is not automatically a leak or OS bug</td></tr>
+      </tbody>
+    </table>
+
+    <h2 id="udp">UDP and application responsibility</h2>
+    <p><a href="https://www.rfc-editor.org/rfc/rfc768.html">UDP</a> preserves datagram boundaries and supplies ports plus a checksum, but it does not promise delivery, ordering, duplicate suppression, congestion control, or a connection handshake. If the application needs these, its protocol must define them. "UDP is faster" is workload- and design-dependent; reliability logic can dominate.</p>
+
+    <h2 id="addressing">CIDR and routing essentials</h2>
+    <p>A prefix such as <code>10.20.4.0/24</code> states that the first 24 bits identify the network prefix. A host uses its routes to choose a next hop; routers use longest-prefix match among applicable routes. ARP resolves an IPv4 next-hop address on the local link - it does not cross routers. IPv6 uses Neighbor Discovery rather than ARP.</p>
+    <table>
+      <thead><tr><th>Question</th><th>Reasoning move</th></tr></thead>
+      <tbody>
+        <tr><td>Is destination on-link?</td><td>Apply the interface prefix/mask; otherwise choose a gateway from the route table</td></tr>
+        <tr><td>Which route wins?</td><td>Longest matching prefix, then platform policy/metric among comparable routes</td></tr>
+        <tr><td>Why can ping work but TCP fail?</td><td>Different protocol/ports, ACL/firewall state, PMTU, service/listener, NAT, or asymmetric path</td></tr>
+        <tr><td>MTU vs MSS?</td><td>MTU bounds an L2/L3 packet on a path/link; TCP MSS advertises maximum TCP payload segment size</td></tr>
+      </tbody>
+    </table>
+
+    <h2 id="security">Security vocabulary with boundaries</h2>
+    <table>
+      <thead><tr><th>Mechanism</th><th>Primary purpose</th><th>Boundary to state</th></tr></thead>
+      <tbody>
+        <tr><td>TLS 1.3</td><td>Peer authentication (as configured), confidentiality, and integrity above transport</td><td>Does not make application authorization or input validation unnecessary</td></tr>
+        <tr><td>Firewall / ACL</td><td>Permit or deny traffic by policy and observed fields/state</td><td>Cannot validate every application invariant</td></tr>
+        <tr><td>NAT</td><td>Translate addresses/ports and maintain mappings</td><td>Address translation is not an authentication guarantee</td></tr>
+        <tr><td>IDS / IPS</td><td>Detect, and optionally block, suspicious traffic</td><td>Coverage depends on visibility, signatures/models, and encryption boundary</td></tr>
+      </tbody>
+    </table>
+    <p><a href="https://www.rfc-editor.org/rfc/rfc8446.html">TLS 1.3, RFC 8446</a> is the protocol anchor. Use a maintained TLS library; implementing cryptography is explicitly outside this course.</p>
+
+    <h2 id="traps">Interview traps</h2>
+    <table>
+      <thead><tr><th>Trap</th><th>Why it fails</th><th>Stronger answer</th></tr></thead>
+      <tbody>
+        <tr><td>"ARP finds any Internet host's MAC."</td><td>ARP operates on the local link; a host normally resolves the next-hop router.</td><td>Separate destination IP from next-hop L2 address.</td></tr>
+        <tr><td>"TCP preserves messages."</td><td>TCP exposes an ordered byte stream.</td><td>Define length-prefix, delimiter, or fixed-size application framing.</td></tr>
+        <tr><td>"A checksum makes data secure."</td><td>Error detection is not cryptographic authentication or confidentiality.</td><td>State threat model and use authenticated cryptography/TLS.</td></tr>
+        <tr><td>"UDP is always faster."</td><td>Workload, loss, user-space reliability, kernel path, and latency objective matter.</td><td>Compare measured end-to-end requirements and failure semantics.</td></tr>
+        <tr><td>"TIME_WAIT means leaked sockets."</td><td>It is a normal TCP state protecting connection semantics.</td><td>Identify active closer, rate, tuple reuse, and actual resource pressure.</td></tr>
+        <tr><td>Confuse MTU and MSS</td><td>They apply at different layers and account for different headers.</td><td>Draw link MTU, IP packet, TCP header, and payload.</td></tr>
+        <tr><td>"TLS replaces TCP."</td><td>TLS normally runs over a reliable transport and protects application bytes.</td><td>Place each protocol in the path and state its contract.</td></tr>
+        <tr><td>Cast packet bytes to a header struct</td><td>Alignment, padding, lifetime, aliasing, and byte order can break the parse.</td><td>Bounds-check and decode fields explicitly.</td></tr>
+      </tbody>
+    </table>
+
+    <h2 id="stretch">Stretch map - orientation only</h2>
+    <table>
+      <thead><tr><th>Area</th><th>Two-week outcome</th><th>Primary anchor</th></tr></thead>
+      <tbody>
+        <tr><td>VLAN / STP</td><td>Explain segmentation and loop prevention at a high level</td><td>Role/vendor documentation as needed</td></tr>
+        <tr><td>OSPF</td><td>Recognize link-state purpose, adjacency, flooding, and convergence vocabulary</td><td><a href="https://www.rfc-editor.org/rfc/rfc2328.html">RFC 2328</a></td></tr>
+        <tr><td>BGP</td><td>Recognize path-vector policy, sessions, advertisements, and convergence vocabulary</td><td><a href="https://www.rfc-editor.org/rfc/rfc4271.html">RFC 4271</a></td></tr>
+        <tr><td>EVPN / VXLAN / IPsec</td><td>Place overlays/security in a system diagram and name tradeoffs</td><td>Read only for a target role</td></tr>
+        <tr><td>ASIC / NOS pipeline</td><td>Ask informed questions about control plane, data plane, tables, and counters</td><td>Vendor-specific; often proprietary</td></tr>
+      </tbody>
+    </table>
+
+    <h2 id="glossary">Glossary</h2>
+    <table>
+      <thead><tr><th>Term</th><th>Course meaning</th></tr></thead>
+      <tbody>
+        <tr><td>Frame</td><td>A link-layer unit carrying a payload and local-link addressing/type information.</td></tr>
+        <tr><td>Datagram</td><td>A self-contained network or transport-layer message whose boundary is preserved by the service.</td></tr>
+        <tr><td>Byte stream</td><td>An ordered sequence of bytes with no application message boundaries.</td></tr>
+        <tr><td>Framing</td><td>The application-layer mapping between a byte stream and messages.</td></tr>
+        <tr><td>Flow control</td><td>Mechanism preventing a sender from overwhelming a receiver.</td></tr>
+        <tr><td>Congestion control</td><td>Mechanism adapting offered load to inferred network capacity.</td></tr>
+        <tr><td>Next hop</td><td>The adjacent router or destination selected for the next link-layer transmission.</td></tr>
+        <tr><td>Longest-prefix match</td><td>Route selection favoring the matching route with the most specific prefix.</td></tr>
+      </tbody>
+    </table>
+
+    <h2 id="anchors">Primary anchors</h2>
+    <p><a href="https://www.rfc-editor.org/rfc/rfc9293.html">TCP / RFC 9293</a> | <a href="https://www.rfc-editor.org/rfc/rfc768.html">UDP / RFC 768</a> | <a href="https://www.rfc-editor.org/rfc/rfc791.html">IPv4 / RFC 791</a> | <a href="https://www.rfc-editor.org/rfc/rfc8200.html">IPv6 / RFC 8200</a> | <a href="https://www.rfc-editor.org/rfc/rfc826.html">ARP / RFC 826</a> | <a href="https://www.rfc-editor.org/rfc/rfc792.html">ICMP / RFC 792</a></p>
+
+    <nav class="lesson-nav" aria-label="Reference navigation">
+      <a href="../index.html">Course home</a>
+      <span><a href="../lessons/0006-read-the-wire.html">Day 6</a> &middot; <a href="../lessons/0007-socket-reality.html">Day 7</a> &middot; <a href="../lessons/0012-harden-the-boundary.html">Day 12</a> &middot; <a href="../lessons/0013-design-and-explain.html">Day 13</a></span>
+    </nav>
+  </main>
+</body>
+</html>

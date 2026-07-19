@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="A printable field guide to debugging and performance analysis for C++ systems software.">
+  <title>Debugging and Performance | NetForge</title>
+  <link rel="stylesheet" href="../assets/course.css">
+</head>
+<body>
+  <main class="shell lesson-shell">
+    <header class="masthead">
+      <a class="brand" href="../index.html">NetForge</a>
+      <span class="quiet">Reference 05 / 07</span>
+    </header>
+
+    <section class="hero">
+      <p class="eyebrow">Printable field guide</p>
+      <h1>Debugging and performance</h1>
+      <p class="lede">Turn symptoms into evidence, evidence into a falsifiable hypothesis, and each change into a measured comparison.</p>
+      <div class="meta-row">
+        <span class="pill">Core: Day 10</span>
+        <span class="pill">Reuse: Day 14</span>
+        <span class="pill">Linux / WSL + macOS</span>
+      </div>
+    </section>
+
+    <aside class="callout"><strong>Mission fit.</strong> Technical rounds often test how you investigate, not just whether you remember a command. Practice one crash, one race, one hang, one syscall failure, and one throughput bottleneck in the capstone.</aside>
+    <aside class="callout warning"><strong>Two-week boundary.</strong> A repeatable evidence-first workflow and the core tools are required. eBPF, production fleet profiling, hardware-counter expertise, and advanced allocator/NUMA tuning are stretch.</aside>
+
+    <h2 id="loop">The evidence loop</h2>
+    <ol class="flow">
+      <li><strong>Reproduce.</strong><br>Smallest reliable input, build, environment, and timing.</li>
+      <li><strong>Observe.</strong><br>Logs, return values, backtraces, syscalls, counters, capture.</li>
+      <li><strong>Hypothesize.</strong><br>One causal claim with a prediction that can be wrong.</li>
+      <li><strong>Instrument.</strong><br>Use the narrowest tool that distinguishes alternatives.</li>
+      <li><strong>Change.</strong><br>One controlled fix; preserve a regression test.</li>
+      <li><strong>Compare.</strong><br>Same workload, uncertainty shown, side effects checked.</li>
+    </ol>
+
+    <blockquote>"It is slow" is a symptom. "At 500 connections, p99 rises with runnable threads while CPU is saturated in frame copies" is evidence you can design against.</blockquote>
+
+    <h2 id="tools">Tool selection matrix</h2>
+    <table>
+      <thead><tr><th>Question</th><th>First tool</th><th>Evidence produced</th><th>Key limitation</th></tr></thead>
+      <tbody>
+        <tr><td>Suspicious code before running?</td><td>Warnings + <a href="https://clang.llvm.org/extra/clang-tidy/"><code>clang-tidy</code></a></td><td>Static diagnostics and rule matches</td><td>False positives and incomplete runtime context</td></tr>
+        <tr><td>Use-after-free / overflow?</td><td><a href="https://clang.llvm.org/docs/AddressSanitizer.html">ASan</a></td><td>Fault site plus allocation/free stacks</td><td>Executed paths only; overhead and platform limits</td></tr>
+        <tr><td>Undefined arithmetic/type behavior?</td><td><a href="https://clang.llvm.org/docs/UndefinedBehaviorSanitizer.html">UBSan</a></td><td>Runtime UB diagnostics</td><td>Not every language-rule violation is detected</td></tr>
+        <tr><td>Data race?</td><td><a href="https://clang.llvm.org/docs/ThreadSanitizer.html">TSan</a></td><td>Conflicting access stacks and synchronization history</td><td>High overhead; separate build; path coverage</td></tr>
+        <tr><td>Crash / wrong state?</td><td><a href="https://sourceware.org/gdb/current/onlinedocs/gdb">GDB</a> / <a href="https://lldb.llvm.org/use/tutorial.html">LLDB</a></td><td>Backtrace, registers, frames, variables, core dump</td><td>Optimization/timing can obscure state</td></tr>
+        <tr><td>Syscall stuck or failing?</td><td><a href="https://man7.org/linux/man-pages/man1/strace.1.html"><code>strace</code></a></td><td>Syscalls, return values, errors, timing</td><td>Linux-specific and can perturb timing</td></tr>
+        <tr><td>Where is CPU time?</td><td><a href="https://perfwiki.github.io/main/tutorial/"><code>perf</code></a> sampling</td><td>Profiles, call graphs, counters</td><td>Needs symbols, representative load, careful interpretation</td></tr>
+        <tr><td>Heap issues without sanitizer build?</td><td><a href="https://valgrind.org/docs/manual/mc-manual.html">Valgrind Memcheck</a></td><td>Invalid accesses and leak classifications</td><td>Linux-focused and substantially slower</td></tr>
+      </tbody>
+    </table>
+
+    <h2 id="builds">Keep diagnostic builds explicit</h2>
+    <table>
+      <thead><tr><th>Preset</th><th>Intent</th><th>Typical properties</th></tr></thead>
+      <tbody>
+        <tr><td>debug</td><td>Debugger-friendly functional work</td><td>Symbols, warnings, assertions, low optimization</td></tr>
+        <tr><td>asan-ubsan</td><td>Memory safety and undefined behavior</td><td>ASan + UBSan, symbols, frame pointers</td></tr>
+        <tr><td>tsan</td><td>Concurrency diagnostics</td><td>TSan alone, symbols, stress workload</td></tr>
+        <tr><td>release</td><td>Representative performance</td><td>Optimization, symbols retained separately/as supported</td></tr>
+      </tbody>
+    </table>
+    <p>ASan and TSan are normally separate configurations. Always preserve the exact compiler, flags, commit, workload, and environment with a result. Official <a href="https://cmake.org/cmake/help/latest/manual/cmake-presets.7.html">CMake Presets</a> make this repeatable across VS Code and the terminal.</p>
+
+    <h2 id="playbooks">Fast diagnostic playbooks</h2>
+
+    <h3>Crash</h3>
+    <ol>
+      <li>Capture exit status, signal, stderr, exact input, and build identity.</li>
+      <li>Reproduce under ASan/UBSan. If only optimized/production-like, retain a core dump.</li>
+      <li>In GDB/LLDB, inspect all thread backtraces, faulting frame, arguments, object invariants, and ownership history.</li>
+      <li>Reduce to the smallest failing case; write the regression before or with the fix.</li>
+    </ol>
+
+    <h3>Hang or deadlock</h3>
+    <ol>
+      <li>Define no-progress precisely: no accept, no completed request, queue unchanged, or thread blocked?</li>
+      <li>Capture all thread stacks more than once. Map each wait to its mutex, condition, FD, or child.</li>
+      <li>Use syscall tracing to distinguish user-space lock waits from blocking I/O.</li>
+      <li>Check lock order, missed predicate transitions, lost wakeup assumptions, queue bounds, and shutdown paths.</li>
+    </ol>
+
+    <h3>Network failure</h3>
+    <ol>
+      <li>Record endpoint, socket state, syscall result and <code>errno</code>, deadline, and byte counts.</li>
+      <li>Correlate application logs with <code>strace</code> and a packet capture using timestamps/request IDs.</li>
+      <li>Separate name resolution, route, handshake, TLS, framing, service, and application timeout failures.</li>
+    </ol>
+
+    <h2 id="performance">Performance requires a question and a budget</h2>
+    <table>
+      <thead><tr><th>Metric</th><th>Meaning</th><th>Common mistake</th></tr></thead>
+      <tbody>
+        <tr><td>Latency</td><td>Time per operation; report a distribution such as p50/p95/p99/max</td><td>Reporting only the mean</td></tr>
+        <tr><td>Throughput</td><td>Completed useful work per unit time</td><td>Counting attempts rather than successful work</td></tr>
+        <tr><td>Utilization</td><td>Fraction of a resource's available capacity used</td><td>Assuming high utilization identifies the cause</td></tr>
+        <tr><td>Saturation</td><td>No spare capacity; queued work or contention grows</td><td>Ignoring queue delay while CPU looks acceptable</td></tr>
+        <tr><td>Errors</td><td>Failures, timeouts, rejections, retries, corruptions</td><td>Calling shedding failures without separating policy</td></tr>
+      </tbody>
+    </table>
+
+    <p>Measure CPU profile, syscalls, allocations, context switches, page faults, cache-miss indicators, queue depths, and bytes copied only when they test a bottleneck hypothesis. The C++ Core Guidelines' <a href="https://isocpp.github.io/CppCoreGuidelines/CppCoreGuidelines#S-performance">performance section</a> reinforces: do not optimize without data.</p>
+
+    <h3>Benchmark hygiene</h3>
+    <ul class="checklist">
+      <li><input type="checkbox">Workload is representative and input/output cannot be optimized away.</li>
+      <li><input type="checkbox">Warmup, run duration, repetitions, and summary statistics are recorded.</li>
+      <li><input type="checkbox">Hardware/VM/WSL version, compiler, flags, and background load are controlled or disclosed.</li>
+      <li><input type="checkbox">Correctness, error rate, and resource use are measured beside speed.</li>
+      <li><input type="checkbox">Before/after uses the same harness and includes uncertainty/noise.</li>
+      <li><input type="checkbox">Optimization target is tied to a user or system budget.</li>
+    </ul>
+
+    <h2 id="traps">Interview traps</h2>
+    <table>
+      <thead><tr><th>Trap</th><th>Why it fails</th><th>Stronger answer</th></tr></thead>
+      <tbody>
+        <tr><td>Optimize the hottest-looking code first</td><td>Intuition routinely misidentifies end-to-end bottlenecks.</td><td>State budget, reproduce load, profile, then change.</td></tr>
+        <tr><td>"The sanitizer is clean, so the code is safe."</td><td>Dynamic tools see executed paths and have coverage/implementation limits.</td><td>Combine invariants, tests, review, multiple tools, and fault injection.</td></tr>
+        <tr><td>Run ASan and TSan as one magic build</td><td>They have incompatible or impractical instrumentation combinations.</td><td>Use explicit independent presets and the same scenario suite.</td></tr>
+        <tr><td>Use average latency</td><td>Queues and rare stalls hide in the tail.</td><td>Show distribution, percentiles, max, load, and sample count.</td></tr>
+        <tr><td>Assume debugger behavior equals normal timing</td><td>Breakpoints and instrumentation alter schedules and deadlines.</td><td>Capture cores/traces and reproduce with minimally invasive tools.</td></tr>
+        <tr><td>Read a hardware counter as a conclusion</td><td>Counters require normalization and causal context.</td><td>Connect counter changes to profile, code path, and controlled experiment.</td></tr>
+        <tr><td>Microbenchmark an isolated function and claim service speedup</td><td>End-to-end queues, I/O, contention, and copies may dominate.</td><td>Validate the change in both micro and representative service workloads.</td></tr>
+      </tbody>
+    </table>
+
+    <h2 id="stretch">Stretch shelf</h2>
+    <p>Linux eBPF tracing, off-CPU/flame-graph analysis, macOS Instruments, allocator profiling, profile-guided optimization, perf-event multiplexing, cache/NUMA analysis, continuous production profiling, and coordinated-omission-resistant load testing.</p>
+
+    <h2 id="glossary">Glossary</h2>
+    <table>
+      <thead><tr><th>Term</th><th>Course meaning</th></tr></thead>
+      <tbody>
+        <tr><td>Hypothesis</td><td>A causal explanation that predicts an observation capable of disproving it.</td></tr>
+        <tr><td>Reproducer</td><td>The smallest controlled scenario that triggers the observed problem reliably enough to study.</td></tr>
+        <tr><td>Latency</td><td>Time taken per operation; always qualify the distribution and load.</td></tr>
+        <tr><td>Throughput</td><td>Useful work completed per unit time.</td></tr>
+        <tr><td>Saturation</td><td>A resource has no spare capacity and waiting/queueing grows.</td></tr>
+        <tr><td>Profile</td><td>Sampled or instrumented evidence attributing resource use to execution paths.</td></tr>
+        <tr><td>Regression</td><td>A previously working property that a change breaks; also the test preserving that property.</td></tr>
+      </tbody>
+    </table>
+
+    <h2 id="anchors">Primary anchors</h2>
+    <p><a href="https://clang.llvm.org/docs/AddressSanitizer.html">ASan</a> | <a href="https://clang.llvm.org/docs/UndefinedBehaviorSanitizer.html">UBSan</a> | <a href="https://clang.llvm.org/docs/ThreadSanitizer.html">TSan</a> | <a href="https://sourceware.org/gdb/current/onlinedocs/gdb">GDB</a> | <a href="https://lldb.llvm.org/use/tutorial.html">LLDB</a> | <a href="https://man7.org/linux/man-pages/man1/strace.1.html"><code>strace</code></a> | <a href="https://perfwiki.github.io/main/tutorial/"><code>perf</code></a></p>
+
+    <nav class="lesson-nav" aria-label="Reference navigation">
+      <a href="../index.html">Course home</a>
+      <span><a href="../lessons/0010-debug-under-fire.html">Day 10</a> &middot; <a href="../lessons/0014-prove-readiness.html">Day 14</a></span>
+    </nav>
+  </main>
+</body>
+</html>

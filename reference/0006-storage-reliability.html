@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="A printable field guide to filesystems, durability, write-ahead logging, crash recovery, and NAS orientation.">
+  <title>Storage and Reliability | NetForge</title>
+  <link rel="stylesheet" href="../assets/course.css">
+</head>
+<body>
+  <main class="shell lesson-shell">
+    <header class="masthead">
+      <a class="brand" href="../index.html">NetForge</a>
+      <span class="quiet">Reference 06 / 07</span>
+    </header>
+
+    <section class="hero">
+      <p class="eyebrow">Printable field guide</p>
+      <h1>Storage and reliability</h1>
+      <p class="lede">A write is not a durability promise. Name the layer, ordering, acknowledgement point, and failure model before saying data is safe.</p>
+      <div class="meta-row">
+        <span class="pill">Core: Day 11</span>
+        <span class="pill">Stretch: NAS orientation</span>
+        <span class="pill">Failure-first</span>
+      </div>
+    </section>
+
+    <aside class="callout"><strong>Mission fit.</strong> Add a tiny write-ahead log to NetForge, inject truncation and restart failures, and explain exactly what an acknowledged mutation survives.</aside>
+    <aside class="callout warning"><strong>Two-week boundary.</strong> Core is local-file durability mechanics, a small WAL, recovery invariants, and failure injection. NFS/SMB internals, distributed consensus, RAID implementation, iSCSI, NVMe, and high-availability storage are specialist orientation only.</aside>
+
+    <h2 id="layers">Place the bytes in the stack</h2>
+    <ol class="flow">
+      <li><strong>Application.</strong><br>Object state, serialization, user-space buffers.</li>
+      <li><strong>System call / VFS.</strong><br>Kernel interface and filesystem abstraction.</li>
+      <li><strong>Page cache / filesystem.</strong><br>Dirty pages, metadata, journaling/COW policy.</li>
+      <li><strong>Block stack / device.</strong><br>Queues, controller cache, media, flush semantics.</li>
+      <li><strong>Remote path.</strong><br>Client/server caches, protocol acknowledgement, network.</li>
+    </ol>
+    <p>The Linux kernel's <a href="https://docs.kernel.org/filesystems/vfs.html">VFS documentation</a> describes the abstraction between applications and concrete filesystems. A successful C++ stream flush, <code>write()</code>, or <code>close()</code> can leave bytes only in volatile layers. Define durability relative to failures such as process crash, kernel panic, power loss, or device loss.</p>
+
+    <h2 id="replace">Durable replace pattern</h2>
+    <ol>
+      <li>Create a temporary file in the same directory, with safe flags and permissions.</li>
+      <li>Write all bytes; handle short writes, <code>EINTR</code>, disk full, quota, and I/O errors.</li>
+      <li>Call <code>fsync(temp_fd)</code> (or the platform/filesystem-appropriate equivalent) and check it.</li>
+      <li>Atomically <code>rename(temp, target)</code> in the same filesystem.</li>
+      <li>Open and <code>fsync</code> the containing directory so the directory-entry update is persisted.</li>
+    </ol>
+    <p>This is a pattern, not a universal proof: filesystem, mount options, device cache, hardware behavior, and the exact failure model matter. Linux <a href="https://man7.org/linux/man-pages/man2/fsync.2.html"><code>fsync(2)</code></a> notes that syncing a file does not necessarily persist its directory entry; <a href="https://man7.org/linux/man-pages/man2/rename.2.html"><code>rename(2)</code></a> defines namespace replacement semantics but not, by itself, every durability guarantee.</p>
+
+    <h2 id="wal">Write-ahead log: order before apply</h2>
+    <table>
+      <thead><tr><th>Phase</th><th>Invariant</th><th>Failure response</th></tr></thead>
+      <tbody>
+        <tr><td>Encode record</td><td>Version, length, operation ID, payload, checksum are bounded and deterministic</td><td>Reject before touching durable state</td></tr>
+        <tr><td>Append record</td><td>Record bytes precede the state mutation they justify</td><td>Short/torn tail is detectable</td></tr>
+        <tr><td>Durability barrier</td><td>Acknowledge only after the declared log durability point</td><td>Return an error/unknown outcome if barrier fails</td></tr>
+        <tr><td>Apply mutation</td><td>Replay is idempotent or duplicate-detectable</td><td>Recovery can reapply safely</td></tr>
+        <tr><td>Checkpoint / truncate</td><td>Checkpoint is durable before older log is discarded</td><td>Retain recoverable log on interrupted checkpoint</td></tr>
+      </tbody>
+    </table>
+
+    <pre><code>// Conceptual recovery loop.
+while (auto header = read_header(log)) {
+  if (!valid_version(*header) || header-&gt;length &gt; kMaxRecord) break;
+  auto payload = read_exact(log, header-&gt;length);
+  if (!payload || !checksum_ok(*header, *payload)) break; // torn tail
+  if (!already_applied(header-&gt;operation_id)) {
+    apply_idempotently(*header, *payload);
+  }
+}
+// A corrupt interior record is different from an incomplete final record:
+// state and report the policy instead of silently skipping arbitrary bytes.</code></pre>
+
+    <p>For the two-week project, keep the model small: append-only length-delimited records, checksum, operation ID, explicit sync mode, deterministic replay, and injected truncation. Write down whether acknowledgement means process-crash durability, host power-loss durability, or something weaker.</p>
+
+    <h2 id="failures">Failure matrix</h2>
+    <table>
+      <thead><tr><th>Failure</th><th>What may be lost/ambiguous</th><th>Design/test response</th></tr></thead>
+      <tbody>
+        <tr><td>Process crash</td><td>User-space buffers and in-progress mutation</td><td>Kill at each WAL phase; replay committed records</td></tr>
+        <tr><td>Kernel crash / power loss</td><td>Dirty page cache and unflushed metadata/device caches</td><td>State fsync/flush assumptions; test on suitable environment where possible</td></tr>
+        <tr><td>Disk full / quota</td><td>Partial write, failed sync, inability to checkpoint</td><td>Check every result; preserve previous valid state; surface capacity metric</td></tr>
+        <tr><td>I/O error</td><td>Outcome may be unknown and filesystem/device may degrade</td><td>Stop unsafe acknowledgement; log context; define read-only/fail-fast policy</td></tr>
+        <tr><td>Torn/truncated tail</td><td>Final WAL record incomplete</td><td>Length/checksum validation; ignore only according to explicit tail policy</td></tr>
+        <tr><td>Network partition</td><td>Client cannot know whether remote mutation committed</td><td>Request IDs, idempotency, timeout semantics, reconciliation</td></tr>
+        <tr><td>Replica loss</td><td>Durability/availability depends on quorum/replication policy</td><td>Outside core; state consistency and failover contract</td></tr>
+      </tbody>
+    </table>
+
+    <h2 id="concepts">Storage interview vocabulary</h2>
+    <table>
+      <thead><tr><th>Concept</th><th>Compact explanation</th><th>Question to ask</th></tr></thead>
+      <tbody>
+        <tr><td>Page cache</td><td>Kernel-cached file pages bridging memory and storage I/O</td><td>Does the measurement include cache hits or durable writes?</td></tr>
+        <tr><td>IOPS / throughput</td><td>Operations per second versus bytes per second</td><td>What operation size, mix, queue depth, and latency?</td></tr>
+        <tr><td>RAID</td><td>Combines devices for performance and/or failure tolerance by level</td><td>Which failures are tolerated, and where are backups?</td></tr>
+        <tr><td>Snapshot</td><td>Point-in-time view, often using copy-on-write/redirect-on-write metadata</td><td>Is it crash-consistent or application-consistent?</td></tr>
+        <tr><td>Replication</td><td>Maintains data copies across failure domains</td><td>When is a write acknowledged and how is divergence handled?</td></tr>
+        <tr><td>Consistency</td><td>Rules governing which values operations may observe and in what order</td><td>Which model, scope, and failure assumptions?</td></tr>
+        <tr><td>Availability</td><td>Ability to serve allowed operations under stated conditions</td><td>At what correctness and latency threshold?</td></tr>
+      </tbody>
+    </table>
+
+    <h2 id="nas">NAS protocol orientation - stretch</h2>
+    <p><a href="https://www.rfc-editor.org/rfc/rfc8881.html">NFSv4.1, RFC 8881</a> and Microsoft's <a href="https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-smb2/5606ad47-5ee0-437a-817e-70c366052962">SMB2/3 open specification</a> are large specialist sources. For this sprint, build a comparison vocabulary:</p>
+    <table>
+      <thead><tr><th>Dimension</th><th>Questions to reason about</th></tr></thead>
+      <tbody>
+        <tr><td>State</td><td>What does client/server remember about opens, sessions, locks, and recovery?</td></tr>
+        <tr><td>Caching</td><td>Who may cache data/metadata, and how is coherence maintained?</td></tr>
+        <tr><td>Locks / leases</td><td>What is delegated, recalled, timed out, or recovered after reconnect?</td></tr>
+        <tr><td>Identity / security</td><td>How are clients authenticated and access decisions represented?</td></tr>
+        <tr><td>Failure recovery</td><td>What happens after server restart, failover, retransmission, or session loss?</td></tr>
+        <tr><td>Semantics</td><td>How closely do remote operations match local filesystem expectations?</td></tr>
+      </tbody>
+    </table>
+    <p>iSCSI and NVMe are block-storage interfaces, not NAS file protocols. Their <a href="https://www.rfc-editor.org/rfc/rfc7143.html">iSCSI RFC</a> and <a href="https://nvmexpress.org/specifications/">NVMe specifications</a> are optional role-driven reading.</p>
+
+    <h2 id="traps">Interview traps</h2>
+    <table>
+      <thead><tr><th>Trap</th><th>Why it fails</th><th>Stronger answer</th></tr></thead>
+      <tbody>
+        <tr><td>"<code>close()</code> means durable."</td><td>It releases a descriptor; dirty data may remain in volatile caches and errors may surface elsewhere.</td><td>Name and check the required durability barrier before acknowledgement.</td></tr>
+        <tr><td>"<code>fsync(file)</code> persists the filename."</td><td>The directory entry is separate metadata.</td><td>For durable creation/replacement, sync the containing directory as required.</td></tr>
+        <tr><td>"Atomic rename makes the update power-safe."</td><td>Namespace atomicity and durable persistence are different properties.</td><td>Order file sync, rename, and directory sync under a declared failure model.</td></tr>
+        <tr><td>Assume <code>write()</code> transfers everything</td><td>Short writes and errors are allowed.</td><td>Loop with checked progress; handle full disk and unknown outcomes.</td></tr>
+        <tr><td>"RAID is a backup."</td><td>It does not protect against deletion, corruption, compromise, or all correlated failures.</td><td>Separate availability, redundancy, snapshots, and independent tested backups.</td></tr>
+        <tr><td>"Replication means strong consistency."</td><td>A copy count does not specify acknowledgement or read ordering.</td><td>Name the consistency model and quorum/failover behavior.</td></tr>
+        <tr><td>Assume NFS/SMB behaves exactly like a local filesystem</td><td>Network, cache, state, lock, and recovery semantics add failure modes.</td><td>Ask which protocol/version/mount policy and reason from its contract.</td></tr>
+        <tr><td>Silently skip any corrupt WAL record</td><td>An interior corruption can hide lost committed state and misalign parsing.</td><td>Distinguish permitted incomplete tail from integrity failure; fail loudly by policy.</td></tr>
+      </tbody>
+    </table>
+
+    <h2 id="glossary">Glossary</h2>
+    <table>
+      <thead><tr><th>Term</th><th>Course meaning</th></tr></thead>
+      <tbody>
+        <tr><td>Durability</td><td>Acknowledged data survives the explicitly stated failure model.</td></tr>
+        <tr><td>Crash consistency</td><td>On-disk state after interruption obeys the declared invariants.</td></tr>
+        <tr><td>Write-ahead log (WAL)</td><td>A durable record written before the state mutation it authorizes, enabling recovery/replay.</td></tr>
+        <tr><td>Idempotent</td><td>Applying an operation more than once has the same allowed effect as applying it once.</td></tr>
+        <tr><td>Checkpoint</td><td>A durable compact state from which older log history can be retired safely.</td></tr>
+        <tr><td>Failure model</td><td>The set of faults and timing assumptions a guarantee explicitly covers.</td></tr>
+        <tr><td>IOPS</td><td>Completed storage I/O operations per unit time, meaningful only with workload details.</td></tr>
+      </tbody>
+    </table>
+
+    <h2 id="anchors">Primary anchors</h2>
+    <p><a href="https://docs.kernel.org/filesystems/vfs.html">Linux VFS</a> | <a href="https://man7.org/linux/man-pages/man2/fsync.2.html"><code>fsync(2)</code></a> | <a href="https://man7.org/linux/man-pages/man2/rename.2.html"><code>rename(2)</code></a> | <a href="https://www.rfc-editor.org/rfc/rfc8881.html">NFSv4.1 / RFC 8881</a> | <a href="https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-smb2/5606ad47-5ee0-437a-817e-70c366052962">SMB2/3 specification</a></p>
+
+    <nav class="lesson-nav" aria-label="Reference navigation">
+      <a href="../index.html">Course home</a>
+      <span><a href="../lessons/0011-persist-and-recover.html">Day 11</a> &middot; <a href="../lessons/0013-design-and-explain.html">Day 13</a></span>
+    </nav>
+  </main>
+</body>
+</html>

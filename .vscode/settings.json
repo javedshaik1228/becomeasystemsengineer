@@ -1,0 +1,50 @@
+{
+  "C_Cpp.default.cppStandard": "c++20",
+  "C_Cpp.intelliSenseEngine": "disabled",
+  "clangd.arguments": [
+    "--background-index",
+    "--clang-tidy",
+    "--completion-style=detailed",
+    "--header-insertion=never",
+    "--compile-commands-dir=build/vscode-work"
+  ],
+  "clangd.checkUpdates": false,
+  "cmake.buildDirectory": "${workspaceFolder}/build/vscode-work",
+  "cmake.configureOnOpen": false,
+  "cmake.configureSettings": {
+    "CMAKE_BUILD_TYPE": "Debug",
+    "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+    "NETFORGE_TRACK": "work"
+  },
+  "cmake.sourceDirectory": "${workspaceFolder}/capstone",
+  "editor.bracketPairColorization.enabled": true,
+  "editor.codeActionsOnSave": {
+    "source.fixAll": "never"
+  },
+  "editor.formatOnSave": false,
+  "editor.hover.delay": 650,
+  "editor.inlayHints.enabled": "offUnlessPressed",
+  "editor.minimap.enabled": false,
+  "editor.renderWhitespace": "selection",
+  "errorLens.delay": 350,
+  "errorLens.enabledDiagnosticLevels": [
+    "error",
+    "warning"
+  ],
+  "explorer.compactFolders": false,
+  "files.exclude": {
+    "**/.DS_Store": true,
+    "**/.git": true,
+    "build": true
+  },
+  "files.insertFinalNewline": true,
+  "files.trimTrailingWhitespace": true,
+  "search.exclude": {
+    "build": true,
+    "capstone/reference": true
+  },
+  "task.allowAutomaticTasks": "off",
+  "terminal.integrated.enablePersistentSessions": false,
+  "workbench.editor.enablePreview": false,
+  "workbench.startupEditor": "none"
+}

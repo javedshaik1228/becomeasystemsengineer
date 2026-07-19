@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Day 8: readiness, non-blocking I/O, and bounded backpressure in NetForge.">
+  <title>Day 08 — Scale the event loop</title>
+  <link rel="stylesheet" href="../assets/course.css">
+  <script src="../assets/course.js" defer></script>
+</head>
+<body data-day="08" data-title="Scale the event loop" data-duration="180">
+  <main class="shell lesson-shell">
+    <header class="masthead">
+      <a class="brand" href="../index.html">NetForge</a>
+      <span class="quiet">Day 08 of 14 · 180 minutes</span>
+    </header>
+
+    <article>
+      <section class="hero">
+        <p class="eyebrow">Readiness · state · overload</p>
+        <h1>Scale the event loop</h1>
+        <p class="lede">Turn “the socket is ready” into a bounded state transition. You will expose slow-client pressure, keep untrusted lengths bounded, and explain what <code>poll</code>, <code>epoll</code>, and <code>kqueue</code> do—and do not—solve.</p>
+        <div class="meta-row">
+          <span class="pill">Measurable win</span>
+          <span class="pill">Slow-client experiment</span>
+          <span class="pill">Core 150 min · Stretch 30 min</span>
+        </div>
+      </section>
+
+      <section>
+        <h2>Your measurable win</h2>
+        <p>Make the Day 08 gate pass, serve two framed requests on one persistent connection, demonstrate that a slow or oversized peer cannot trigger unbounded allocation, and defend one explicit admission/backpressure policy with captured evidence.</p>
+      </section>
+
+      <section>
+        <h2>Recall before notes <span class="quiet">10 min</span></h2>
+        <ol>
+          <li>Why can one TCP <code>recv</code> return half a frame or several frames?</li>
+          <li>Who owns an accepted descriptor after it enters the worker queue?</li>
+          <li>What must happen before allocating from a wire-provided length?</li>
+        </ol>
+        <details>
+          <summary>Check only after answering aloud</summary>
+          <p>TCP preserves an ordered byte stream, not message boundaries. Ownership must transfer once and remain visible. Decode and validate the length against a configured maximum before allocating its payload.</p>
+        </details>
+      </section>
+
+      <section>
+        <h2>Compact mental model</h2>
+        <blockquote>Readiness is permission to try an operation—not proof that a whole request can finish.</blockquote>
+        <table>
+          <thead><tr><th>Signal</th><th>Retained state</th><th>Bounded response</th></tr></thead>
+          <tbody>
+            <tr><td>Readable</td><td>Header/payload cursor</td><td>Read until progress stops; reject over limit</td></tr>
+            <tr><td>Writable</td><td>Output buffer cursor</td><td>Write what fits; retain the suffix</td></tr>
+            <tr><td>Would block</td><td>Unchanged partial progress</td><td>Return to the readiness set</td></tr>
+            <tr><td>High-water mark</td><td>Queued byte count</td><td>Pause reads, shed load, or close by policy</td></tr>
+          </tbody>
+        </table>
+        <p><code>poll</code> scans a descriptor array; Linux <code>epoll</code> and macOS <code>kqueue</code> change registration and notification mechanics. None supplies framing, fairness, timeouts, memory caps, or overload policy.</p>
+        <aside class="callout"><strong>Primary source.</strong> Read the readiness and error semantics in Linux <a href="https://man7.org/linux/man-pages/man2/poll.2.html"><code>poll(2)</code></a>. Then use the local <a href="../reference/0003-posix-io-sockets.html">POSIX I/O field guide</a> to compare <code>epoll</code> and <code>kqueue</code>.</aside>
+      </section>
+
+      <section>
+        <h2>Build → break → explain <span class="quiet">110 min</span></h2>
+        <ol class="flow">
+          <li><strong>Build.</strong> Make listener readiness and frame limits explicit.</li>
+          <li><strong>Break.</strong> Hold incomplete frames open and probe overload.</li>
+          <li><strong>Explain.</strong> Compare worker and reactor failure behavior.</li>
+        </ol>
+
+        <h3>Core lane</h3>
+        <ol>
+          <li>Run <code>./scripts/check.sh work day07</code>. Do not debug Day 08 on a red Day 07 baseline.</li>
+          <li>In <code>capstone/work/src/server.cpp</code>, drive the listener with a finite-timeout <code>poll</code>: retry <code>EINTR</code>, accept only on <code>POLLIN</code>, handle error/hangup bits, and never busy-spin. Keep accepted work behind the bounded pool.</li>
+          <li>In <code>capstone/work/src/protocol.cpp</code>, confirm <code>recv_frame</code> validates the decoded length against <code>max_payload</code> <em>before</em> constructing the payload string.</li>
+          <li>In <code>handle_client</code>, keep reading sequential framed requests until EOF, timeout, protocol failure, shutdown, or failed response. One connection still occupies one blocking worker; do not call this a reactor. Run <code>./scripts/check.sh work day08</code>; its integration case sends <code>PING</code> and <code>STATS</code> on the same socket.</li>
+          <li>Start <code>build/work/netforge-server 9090</code>. In another terminal, hold more incomplete clients than the 4-worker/64-item default capacity:</li>
+        </ol>
+        <pre><code>python3 -c 'import socket,struct,time
+xs=[socket.create_connection(("127.0.0.1",9090)) for _ in range(70)]
+[s.sendall(struct.pack("!I",64)) for s in xs]
+time.sleep(3)'</code></pre>
+        <ol start="6">
+          <li>During those three seconds, run <code>build/work/netforge-client 127.0.0.1 9090 PING</code>. Record latency, rejection, or timeout—whichever your policy produces. It must be bounded and explainable.</li>
+          <li>Write <code>readiness.md</code>: current worker ownership, a full-reactor alternative, per-connection state, high/low-water marks, timeout policy, and why the experiment is not a throughput benchmark.</li>
+        </ol>
+
+        <h3>Stretch lane</h3>
+        <p>Prototype a per-connection state table under <code>capstone/work/experiments/</code>. Use non-blocking descriptors and a circular output buffer; remove <code>POLLOUT</code> interest when empty and pause <code>POLLIN</code> at the high-water mark. On Linux, sketch the <code>epoll</code> registration; on macOS, sketch the equivalent <code>kqueue</code> filters.</p>
+      </section>
+
+      <section class="quiz" data-quiz data-answer="b" data-correct="Correct. Backpressure begins before memory becomes unbounded." data-incorrect="Not yet. Separate peer timing from your own bounded-buffer policy.">
+        <h2>One-question check</h2>
+        <p>When should a non-blocking connection stop being read?</p>
+        <label class="choice"><input type="radio" name="day08-quiz" value="a"> Whenever the peer pauses between complete request frames.</label>
+        <label class="choice"><input type="radio" name="day08-quiz" value="b"> When queued output reaches its configured high-water mark.</label>
+        <label class="choice"><input type="radio" name="day08-quiz" value="c"> After every successful write drains one response frame.</label>
+        <button class="button secondary" type="button">Check answer</button>
+        <p class="feedback" aria-live="polite"></p>
+      </section>
+
+      <section>
+        <h2>Coding drill <span class="quiet">25 min, closed book</span></h2>
+        <p>Solve <a href="../interview/CODING-DRILLS.md#day-08--circular-byte-buffer">Day 08 — Circular byte buffer</a>. Set a timer: 3 minutes clarify, 3 state the invariant and complexity, 15 code, 4 test aloud.</p>
+        <p><strong>Say first:</strong> “<code>0 &lt;= size &lt;= capacity</code>; head names the first readable byte.” <strong>Target:</strong> O(bytes copied) time and O(capacity) space. Save the solution as <code>capstone/work/evidence/day-08/drill.cpp</code>.</p>
+      </section>
+
+      <section>
+        <h2>Interview drill <span class="quiet">15 min</span></h2>
+        <p>Answer aloud: “Would replacing <code>poll</code> with <code>epoll</code> fix our slow-client failure?” Spend two minutes clarifying load and latency goals, then cover partial state, level versus edge triggering, queue/byte caps, fairness, cancellation, and observability. End with the smallest measurement that could justify a reactor rewrite.</p>
+      </section>
+
+      <section>
+        <h2>Proof gate <span class="quiet">10 min</span></h2>
+        <pre><code>mkdir -p capstone/work/evidence/day-08
+./scripts/check.sh work day08 | tee capstone/work/evidence/day-08/check.txt
+# Save the slow-client observation as slow-client.txt.
+# Save the worker-versus-reactor defense as readiness.md.</code></pre>
+        <ul class="checklist">
+          <li><label><input type="checkbox" data-check-id="day08-gate"> Day 08 test passes and rejects before payload allocation.</label></li>
+          <li><label><input type="checkbox" data-check-id="day08-pressure"> Slow-client behavior is bounded and captured.</label></li>
+          <li><label><input type="checkbox" data-check-id="day08-defense"> I can explain why readiness is not backpressure.</label></li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>If you get stuck</h2>
+        <p><strong>20 minutes:</strong> write the exact observation and one hypothesis. <strong>40:</strong> inspect the readiness section of the local field guide. <strong>60:</strong> compare only <code>capstone/reference/src/server.cpp</code>, close it, and reimplement from memory. Record what changed your model.</p>
+        <aside class="callout"><strong>Use your teacher.</strong> Ask the agent follow-ups about a readiness flag, an <code>EAGAIN</code> path, or your backpressure policy. Include the smallest trace and the invariant you expected.</aside>
+        <div class="actions"><button class="button" type="button" data-lesson-complete="day-08">Mark lesson complete</button></div>
+      </section>
+    </article>
+
+    <nav class="lesson-nav" aria-label="Lesson navigation">
+      <a href="0007-socket-reality.html">← Day 07 · Socket reality</a>
+      <a href="0009-cross-process-boundaries.html">Day 09 · Process boundaries →</a>
+    </nav>
+  </main>
+</body>
+</html>

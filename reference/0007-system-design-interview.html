@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="A printable system design interview guide for C++ networking and storage roles.">
+  <title>Systems Design Interview Guide | NetForge</title>
+  <link rel="stylesheet" href="../assets/course.css">
+</head>
+<body>
+  <main class="shell lesson-shell">
+    <header class="masthead">
+      <a class="brand" href="../index.html">NetForge</a>
+      <span class="quiet">Reference 07 / 07</span>
+    </header>
+
+    <section class="hero">
+      <p class="eyebrow">Printable field guide</p>
+      <h1>Systems design interview guide</h1>
+      <p class="lede">Design a service as a set of explicit contracts: requirements, invariants, capacity, overload, failure, observability, and justified tradeoffs.</p>
+      <div class="meta-row">
+        <span class="pill">Core: Days 13-14</span>
+        <span class="pill">45-minute map</span>
+        <span class="pill">NetForge capstone</span>
+      </div>
+    </section>
+
+    <aside class="callout"><strong>Mission fit.</strong> Use one coherent design - the NetForge framed TCP key/value service - to demonstrate modern C++, threads, sockets, protocol hardening, durability, debugging, and operational judgment.</aside>
+    <aside class="callout warning"><strong>Two-week boundary.</strong> The core goal is a defensible single-node service and clear scale/failure extensions. NAS internals, routing control planes, cryptographic protocol design, consensus, and multi-region storage remain specialist stretch areas.</aside>
+
+    <h2 id="clock">A 45-minute control loop</h2>
+    <table>
+      <thead><tr><th>Time</th><th>Move</th><th>Visible output</th></tr></thead>
+      <tbody>
+        <tr><td>0-5 min</td><td>Clarify users, operations, scale, latency, durability, consistency, security, platform, and non-goals</td><td>Prioritized functional and quality requirements</td></tr>
+        <tr><td>5-10 min</td><td>Estimate connections, request rate, payload, working set, storage growth, and resource ceilings</td><td>Back-of-envelope capacity budget</td></tr>
+        <tr><td>10-15 min</td><td>Define API/wire contract, ownership, framing, errors, idempotency, and invariants</td><td>Request/response examples and bounds</td></tr>
+        <tr><td>15-25 min</td><td>Draw components, data flow, concurrency model, queues, storage, and trust boundaries</td><td>One end-to-end happy path</td></tr>
+        <tr><td>25-35 min</td><td>Deep dive into the risk most relevant to the role</td><td>Tradeoff comparison and selected design</td></tr>
+        <tr><td>35-42 min</td><td>Walk failures, overload, shutdown, security, observability, deployment, and testing</td><td>Failure matrix plus signals/policies</td></tr>
+        <tr><td>42-45 min</td><td>Recap requirements met, limits, risks, and next experiment</td><td>Concise decision ledger</td></tr>
+      </tbody>
+    </table>
+    <p>Do not treat the clock as rigid. Narrate your highest-risk uncertainty and invite the interviewer to choose the deep dive.</p>
+
+    <h2 id="requirements">NetForge prompt and clarification sheet</h2>
+    <blockquote>Design a Linux/WSL C++20 service that accepts framed TCP requests for GET, PUT, and DELETE, serves concurrent clients, optionally persists mutations, and shuts down safely.</blockquote>
+    <table>
+      <thead><tr><th>Dimension</th><th>Questions</th><th>Candidate baseline</th></tr></thead>
+      <tbody>
+        <tr><td>Correctness</td><td>What consistency per key? Duplicate request behavior?</td><td>Linearizable per-process map operations; operation ID for retried mutation</td></tr>
+        <tr><td>Traffic</td><td>Peak connections/RPS? Read/write mix? Payload distribution?</td><td>State assumptions, then show formulas; do not invent false precision</td></tr>
+        <tr><td>Latency</td><td>Which percentile and load? Local or network client?</td><td>p99 target plus rejection/timeout semantics</td></tr>
+        <tr><td>Durability</td><td>What does an acknowledged PUT survive?</td><td>Configurable memory-only or WAL fsync-before-ack mode</td></tr>
+        <tr><td>Security</td><td>Trusted network? Authn/authz? Encryption? Abuse limits?</td><td>Strict parser/bounds now; TLS/auth integration boundary stated</td></tr>
+        <tr><td>Platform</td><td>Linux only? macOS development? Dependencies?</td><td>POSIX core; epoll on Linux, kqueue adaptation noted</td></tr>
+        <tr><td>Operations</td><td>Upgrade/shutdown budget? Metrics/logging expectations?</td><td>Stop admission, drain to deadline, structured signals and metrics</td></tr>
+      </tbody>
+    </table>
+
+    <h2 id="capacity">Capacity math you can defend</h2>
+    <pre><code>active_memory ~= connections * per_connection_bytes
+              + queued_jobs * average_job_bytes
+              + key_count * average_entry_bytes
+              + fixed_process_overhead
+
+required_service_rate &gt; peak_arrival_rate / target_utilization
+queue_wait ~= queue_depth / effective_completion_rate  // rough diagnostic
+
+daily_log_growth ~= writes_per_second * average_record_bytes * 86,400
+fd_budget &gt; listeners + active_connections + WAL/files + diagnostics + reserve</code></pre>
+    <p>Example assumptions are useful only when labeled: 20,000 connections at 32 KiB of total connection state is about 625 MiB before allocator/other overhead; a 10,000-item queue at 8 KiB average is about 78 MiB. Bounds are architecture, not just validation.</p>
+
+    <h2 id="architecture">Concurrency architecture choices</h2>
+    <table>
+      <thead><tr><th>Model</th><th>Best fit</th><th>Risk</th><th>Defensible NetForge use</th></tr></thead>
+      <tbody>
+        <tr><td>Thread per connection</td><td>Small connection count, blocking simplicity</td><td>Memory/scheduling growth and slow-client occupancy</td><td>First correctness baseline and comparison point</td></tr>
+        <tr><td>Fixed worker pool</td><td>Bound CPU/blocking work with a queue</td><td>Queue overload and head-of-line blocking</td><td>Bounded request jobs; explicit rejection/drain policy</td></tr>
+        <tr><td>Reactor/event loop</td><td>Many mostly idle connections, nonblocking I/O</td><td>State-machine complexity and accidental blocking</td><td>Per-connection input/output buffers; offload bounded work</td></tr>
+        <tr><td>Hybrid</td><td>High connection count plus CPU/storage work</td><td>Cross-thread ownership and overload coupling</td><td>One/few I/O loops + bounded workers; ownership transfer documented</td></tr>
+      </tbody>
+    </table>
+
+    <p>A clean data path is: accept/admit connection &rarr; incrementally parse bounded frame &rarr; authorize/validate &rarr; enqueue bounded work or execute &rarr; mutate/read store &rarr; append/sync WAL if promised &rarr; enqueue bounded response &rarr; write partial bytes &rarr; record outcome. Mark every queue and owner on the diagram.</p>
+
+    <h2 id="overload">Overload is normal operation at the boundary</h2>
+    <table>
+      <thead><tr><th>Mechanism</th><th>Policy question</th><th>Failure avoided</th></tr></thead>
+      <tbody>
+        <tr><td>Connection cap</td><td>Reject immediately, backlog briefly, or prioritize clients?</td><td>FD/memory exhaustion</td></tr>
+        <tr><td>Frame and buffer cap</td><td>Protocol error, close, or drain malicious/oversized input?</td><td>Memory and parsing abuse</td></tr>
+        <tr><td>Bounded work queue</td><td>Block producer, reject, shed low priority, or degrade?</td><td>Unbounded latency/memory</td></tr>
+        <tr><td>Deadline</td><td>End-to-end or per-hop? What cleanup/cancellation occurs?</td><td>Zombie work and resource retention</td></tr>
+        <tr><td>Retry policy</td><td>Is operation idempotent? Backoff, jitter, budget, max attempts?</td><td>Retry amplification and synchronized storms</td></tr>
+        <tr><td>Output watermark</td><td>Pause reads, drop response, or close a slow reader?</td><td>Per-client memory takeover</td></tr>
+      </tbody>
+    </table>
+    <p>Google SRE's <a href="https://sre.google/sre-book/handling-overload/">overload guidance</a> and the AWS Builders' Library on <a href="https://aws.amazon.com/builders-library/timeouts-retries-and-backoff-with-jitter/">timeouts, retries, backoff, and jitter</a> are high-trust operational anchors. Backpressure must propagate or terminate at a deliberate shedding boundary.</p>
+
+    <h2 id="failures">Failure walk</h2>
+    <table>
+      <thead><tr><th>Failure</th><th>Detection</th><th>Containment / recovery</th><th>Client semantics</th></tr></thead>
+      <tbody>
+        <tr><td>Slow or malicious client</td><td>Buffer bytes, no-progress age, parse violations</td><td>Caps, deadlines, pause/close</td><td>Protocol error or connection close</td></tr>
+        <tr><td>Worker saturation</td><td>Queue depth/age, CPU, rejections</td><td>Admission control, shed/degrade, scale after evidence</td><td>Explicit busy/timeout response where possible</td></tr>
+        <tr><td>WAL sync failure</td><td>Checked syscall error and storage health</td><td>Stop durable acknowledgements; fail/read-only policy</td><td>Error or unknown outcome, operation ID supports retry</td></tr>
+        <tr><td>Process crash</td><td>Supervisor restart and crash artifact</td><td>Replay valid WAL; reject corrupt interior records</td><td>Ack contract determines which writes remain</td></tr>
+        <tr><td>Dependency/network timeout</td><td>Deadline and classified error</td><td>Cancel, bounded retry if idempotent, circuit/admission policy</td><td>Stable error with request ID</td></tr>
+        <tr><td>Graceful shutdown</td><td>Signal/control request</td><td>Stop accept, close queues, drain to deadline, join, sync, release</td><td>No new work; in-flight policy is documented</td></tr>
+      </tbody>
+    </table>
+
+    <h2 id="observability">Observe outcomes and saturation</h2>
+    <p>The Google SRE chapter on <a href="https://sre.google/sre-book/monitoring-distributed-systems/">monitoring distributed systems</a> motivates four useful signal families. For NetForge:</p>
+    <table>
+      <thead><tr><th>Signal</th><th>Minimum useful measurements</th></tr></thead>
+      <tbody>
+        <tr><td>Traffic</td><td>Accepted/active connections, requests and bytes by operation</td></tr>
+        <tr><td>Errors</td><td>Parse failures, rejected work, timeouts, resets, WAL/sync failures, recovery corruption</td></tr>
+        <tr><td>Duration</td><td>End-to-end and queue/service latency distributions by operation/outcome</td></tr>
+        <tr><td>Saturation</td><td>Worker utilization, queue depth/oldest age, output-buffer bytes, FDs, CPU, memory, disk latency/capacity</td></tr>
+      </tbody>
+    </table>
+    <p>Use structured logs with request/connection/operation IDs, bounded-cardinality dimensions, and enough context to join application, syscall, and packet evidence. Never log secrets or unbounded attacker-controlled payloads.</p>
+
+    <h2 id="ledger">Tradeoff ledger</h2>
+    <table>
+      <thead><tr><th>Decision</th><th>Chosen because</th><th>Rejected alternative</th><th>Revisit when</th></tr></thead>
+      <tbody>
+        <tr><td>Length-prefixed binary frames</td><td>Incremental parsing and bounded payload are simple</td><td>Delimiter escaping / heavyweight schema</td><td>Compatibility or evolution demands a schema</td></tr>
+        <tr><td>Hybrid reactor + bounded workers</td><td>Many connections, bounded CPU/storage work</td><td>Thread per connection</td><td>Measured connection scale stays small</td></tr>
+        <tr><td>Single-node WAL</td><td>Demonstrates explicit local durability and recovery</td><td>Consensus/replication</td><td>Host/device failure must be tolerated</td></tr>
+        <tr><td>Mutex-protected map initially</td><td>Clear invariants and measurable baseline</td><td>Lock-free/sharded map</td><td>Profile shows lock contention violates budget</td></tr>
+      </tbody>
+    </table>
+
+    <h2 id="branches">Role-specific deep-dive branches - Stretch</h2>
+    <table>
+      <thead><tr><th>Role emphasis</th><th>Deep-dive prompts</th><th>Honest boundary</th></tr></thead>
+      <tbody>
+        <tr><td>NAS / file protocols</td><td>Client caching, locks/leases, namespace semantics, idempotent retry, server restart/failover, durability acknowledgement</td><td>Use NFS/SMB specifications for orientation; no production mastery claim</td></tr>
+        <tr><td>L2/L3 networking</td><td>Control vs data plane, forwarding table update, adjacency/session state, convergence, packet counters, backpressure to control plane</td><td>OSPF/BGP/VLAN/ASIC internals are role-driven study after the core</td></tr>
+        <tr><td>Security networking</td><td>Trust boundaries, mTLS/authz, parser hardening, resource-exhaustion abuse, key/cert rotation, audit evidence</td><td>Use standard TLS libraries; cryptographic design is out of scope</td></tr>
+      </tbody>
+    </table>
+
+    <h2 id="traps">Interview traps</h2>
+    <table>
+      <thead><tr><th>Trap</th><th>Why it fails</th><th>Stronger answer</th></tr></thead>
+      <tbody>
+        <tr><td>Draw architecture before clarifying requirements</td><td>The design cannot be evaluated without load and guarantees.</td><td>Prioritize requirements, assumptions, and non-goals first.</td></tr>
+        <tr><td>Leave a queue unbounded</td><td>It converts overload into memory growth and extreme latency.</td><td>State capacity, admission, shedding, and metric for every queue.</td></tr>
+        <tr><td>Retry every timeout</td><td>Unknown outcomes and retry amplification can worsen failure.</td><td>Require idempotency/request IDs, budget, backoff, jitter, and deadline.</td></tr>
+        <tr><td>Say "strong consistency" without scope</td><td>The term does not define operations, order, replicas, or failures.</td><td>Name the exact observable guarantee and acknowledgement point.</td></tr>
+        <tr><td>Choose epoll as the scaling answer</td><td>Readiness does not solve CPU, storage, contention, slow peers, or queueing.</td><td>Use capacity evidence and an end-to-end bottleneck model.</td></tr>
+        <tr><td>Report only average latency</td><td>Tail delay reveals queues, contention, retries, and outliers.</td><td>Specify percentile, load, errors, and saturation together.</td></tr>
+        <tr><td>Name technologies without tradeoffs</td><td>It hides the decision criteria and operational cost.</td><td>Record choice, rejected option, evidence, and revisit trigger.</td></tr>
+        <tr><td>Ignore shutdown</td><td>Threads, descriptors, accepted work, and durability promises become unsafe.</td><td>Walk stop-admit, wake, drain/deadline, join, sync, release.</td></tr>
+      </tbody>
+    </table>
+
+    <h2 id="glossary">Glossary</h2>
+    <table>
+      <thead><tr><th>Term</th><th>Course meaning</th></tr></thead>
+      <tbody>
+        <tr><td>Invariant</td><td>A property that must remain true across all allowed operations and failure paths.</td></tr>
+        <tr><td>Backpressure</td><td>Limiting or admitting work so demand cannot grow without bound.</td></tr>
+        <tr><td>Load shedding</td><td>Deliberately rejecting or degrading work to preserve bounded service for admitted work.</td></tr>
+        <tr><td>Idempotent</td><td>Applying an operation more than once has the same allowed effect as applying it once.</td></tr>
+        <tr><td>Durability</td><td>Acknowledged data survives the explicitly stated failure model.</td></tr>
+        <tr><td>Latency</td><td>Time taken per operation; always qualify the distribution and load.</td></tr>
+        <tr><td>Throughput</td><td>Useful work completed per unit time.</td></tr>
+        <tr><td>Saturation</td><td>A resource has no spare capacity and waiting/queueing grows.</td></tr>
+      </tbody>
+    </table>
+
+    <h2 id="anchors">Primary anchors</h2>
+    <p><a href="https://sre.google/sre-book/handling-overload/">Google SRE: handling overload</a> | <a href="https://sre.google/sre-book/monitoring-distributed-systems/">Google SRE: monitoring</a> | <a href="https://aws.amazon.com/builders-library/using-load-shedding-to-avoid-overload/">AWS: load shedding</a> | <a href="https://aws.amazon.com/builders-library/timeouts-retries-and-backoff-with-jitter/">AWS: timeouts and retries</a></p>
+
+    <nav class="lesson-nav" aria-label="Reference navigation">
+      <a href="../index.html">Course home</a>
+      <span><a href="../lessons/0013-design-and-explain.html">Day 13</a> &middot; <a href="../lessons/0014-prove-readiness.html">Day 14</a></span>
+    </nav>
+  </main>
+</body>
+</html>

@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Day 12: bounded parsing, timeouts, fuzzing, and security boundaries.">
+  <title>Day 12 — Harden the boundary</title>
+  <link rel="stylesheet" href="../assets/course.css">
+  <script src="../assets/course.js" defer></script>
+</head>
+<body data-day="12" data-title="Harden the boundary" data-duration="180">
+  <main class="shell lesson-shell">
+    <header class="masthead">
+      <a class="brand" href="../index.html">NetForge</a>
+      <span class="quiet">Day 12 of 14 · 180 minutes</span>
+    </header>
+
+    <article>
+      <section class="hero">
+        <p class="eyebrow">Budgets · hostile bytes · trust</p>
+        <h1>Harden the boundary</h1>
+        <p class="lede">Treat every length, byte, wait, and queue slot as attacker-controlled until bounded. Add abuse tests and a fuzz loop, then place TLS, PKI, and IPSec at their real boundaries without confusing transport protection with safe parsing.</p>
+        <div class="meta-row">
+          <span class="pill">Measurable win</span>
+          <span class="pill">Abuse gate + fuzz run</span>
+          <span class="pill">Core 155 min · Stretch 25 min</span>
+        </div>
+      </section>
+
+      <section>
+        <h2>Your measurable win</h2>
+        <p>Pass every Day 12 abuse test under ASan/UBSan, run a bounded fuzz campaign without a crash, and produce a threat-boundary note that assigns limits, timeouts, authentication, and authorization to the correct layer.</p>
+      </section>
+
+      <section>
+        <h2>Recall before notes <span class="quiet">10 min</span></h2>
+        <ol>
+          <li>Why does <code>write</code> not imply durability?</li>
+          <li>Which crash point permits ignoring a WAL record?</li>
+          <li>What changes when stable storage is remote?</li>
+        </ol>
+        <details><summary>Check only after answering aloud</summary><p>Page-cache acceptance is not the persistence contract. Only one incomplete final record may be treated as torn. Remote storage adds protocol, cache, server, and failover semantics that must be named.</p></details>
+      </section>
+
+      <section>
+        <h2>Compact mental model</h2>
+        <blockquote>Authenticate the peer if required; still distrust every byte it is authorized to send.</blockquote>
+        <table>
+          <thead><tr><th>Budget</th><th>NetForge control</th><th>Failure policy</th></tr></thead>
+          <tbody>
+            <tr><td>Bytes</td><td>Frame/key/value/output caps</td><td>Reject before allocation</td></tr>
+            <tr><td>Time</td><td>Read/write/idle/deadline limits</td><td>Cancel or close predictably</td></tr>
+            <tr><td>Work</td><td>Bounded parsing and queue admission</td><td>Shed load without amplification</td></tr>
+            <tr><td>State</td><td>Connection/key/WAL growth policy</td><td>Evict, compact, or refuse explicitly</td></tr>
+          </tbody>
+        </table>
+        <p>Validate each boundary before pointer arithmetic, allocation, copy, or shift. TLS normally protects application bytes above TCP and can authenticate peers through PKI; IPSec protects IP-layer traffic between configured endpoints. Neither supplies application authorization, resource budgets, safe parsers, or replay/idempotency policy.</p>
+        <aside class="callout"><strong>Primary source.</strong> Read the official LLVM <a href="https://llvm.org/docs/LibFuzzer.html">libFuzzer documentation</a>, especially corpus, sanitizer, and bounded-run controls. Use the local <a href="../reference/0004-networking-protocols.html">networking guide</a> for the TLS/PKI/IPSec boundary map.</aside>
+      </section>
+
+      <section>
+        <h2>Build → break → explain <span class="quiet">115 min</span></h2>
+        <ol class="flow">
+          <li><strong>Build.</strong> Enforce byte, time, work, and state limits.</li>
+          <li><strong>Break.</strong> Feed truncation, NULs, and oversized values.</li>
+          <li><strong>Explain.</strong> Draw trust and cryptographic boundaries.</li>
+        </ol>
+
+        <h3>Core lane</h3>
+        <ol>
+          <li>In <code>capstone/work/src/protocol.cpp</code>, reject an empty command, embedded NUL, unsafe/over-128-byte keys, missing/extra arguments, and wire lengths over <code>max_payload</code> before allocation.</li>
+          <li>In <code>capstone/work/src/packet.cpp</code>, prove every Ethernet/VLAN/IP/TCP offset and declared header length fits before reading it. Invalid packets return a structured invalid result, not a partial success.</li>
+          <li>In <code>capstone/work/src/server.cpp</code>, retain finite receive/send timeouts and bounded admission. Decide whether malformed, oversized, slow, and overloaded peers receive an error or immediate close; avoid reflection/amplification.</li>
+          <li>Run <code>./scripts/check.sh work day12</code>, then the ASan/UBSan build from Day 10.</li>
+          <li>Create <code>capstone/work/experiments/day12_fuzz.cpp</code> with <code>LLVMFuzzerTestOneInput</code>. Construct a <code>string_view</code> over the supplied bytes and call <code>parse_command</code>; also pass the same bytes to <code>decode_ethernet_ipv4_tcp</code>. It must contain no assertions about random input and no unbounded logging.</li>
+        </ol>
+        <pre><code>mkdir -p capstone/work/evidence/day-12/corpus
+printf 'PING' &gt; capstone/work/evidence/day-12/corpus/ping
+printf 'GET a\0hidden' &gt; capstone/work/evidence/day-12/corpus/nul
+clang++ -std=c++20 -fsanitize=fuzzer,address,undefined \
+  -Icapstone/work/include capstone/work/experiments/day12_fuzz.cpp \
+  capstone/work/src/protocol.cpp capstone/work/src/packet.cpp \
+  -o build/work/day12-fuzz
+build/work/day12-fuzz capstone/work/evidence/day-12/corpus \
+  -max_total_time=30 -max_len=65540</code></pre>
+        <ol start="6">
+          <li>Write <code>threat-boundary.md</code>: untrusted network → TCP/IPSec boundary → TLS/PKI peer boundary → frame/parser → command authorization → store/WAL. Assign owner, budget, failure response, and observable counter to each arrow.</li>
+        </ol>
+
+        <h3>Stretch lane</h3>
+        <p>Add a fuzz dictionary for command verbs and a regression seed for every discovered defect. Sketch TLS termination and certificate rotation using a maintained library or proxy; do not implement cryptography. Add replay/idempotency identifiers only after stating state and retention bounds.</p>
+      </section>
+
+      <section class="quiz" data-quiz data-answer="a" data-correct="Correct. The safe boundary rejects impossible work before allocating it." data-incorrect="Not yet. Validation must precede allocation and deeper interpretation.">
+        <h2>One-question check</h2>
+        <p>Which order is safe for an untrusted declared length?</p>
+        <label class="choice"><input type="radio" name="day12-quiz" value="a"> Reject oversized lengths before allocation or deeper parsing begins.</label>
+        <label class="choice"><input type="radio" name="day12-quiz" value="b"> Accept oversized lengths, then trim payloads after parsing finishes.</label>
+        <label class="choice"><input type="radio" name="day12-quiz" value="c"> Reserve declared lengths, then validate commands during execution later.</label>
+        <button class="button secondary" type="button">Check answer</button>
+        <p class="feedback" aria-live="polite"></p>
+      </section>
+
+      <section>
+        <h2>Coding drill <span class="quiet">25 min, closed book</span></h2>
+        <p>Solve <a href="../interview/CODING-DRILLS.md#day-12--safe-variable-length-integer">Day 12 — Safe variable-length integer</a> with the 3/3/15/4-minute timer.</p>
+        <p><strong>Say first:</strong> “No shift reaches 64 bits, and rejected input never wraps.” <strong>Target:</strong> O(min(n, 10)) time and O(1) space. Test truncation, more than ten bytes, and invalid tenth-byte high bits; save <code>drill.cpp</code>.</p>
+      </section>
+
+      <section>
+        <h2>Interview drill <span class="quiet">15 min</span></h2>
+        <p>Threat-model NetForge for one hostile authenticated client. Cover frame bombs, slowloris behavior, parser ambiguity, queue exhaustion, log growth, replay, authorization, secrets, and observability. Then answer: “What do TLS, PKI, and IPSec each protect, and what remains ours?”</p>
+      </section>
+
+      <section>
+        <h2>Proof gate <span class="quiet">10 min</span></h2>
+        <pre><code>mkdir -p capstone/work/evidence/day-12
+./scripts/check.sh work day12 | tee capstone/work/evidence/day-12/check.txt
+build/work/day12-fuzz capstone/work/evidence/day-12/corpus \
+  -max_total_time=30 -max_len=65540 \
+  2&gt;&amp;1 | tee capstone/work/evidence/day-12/fuzz.txt
+# Save threat-boundary.md, sanitizer output, corpus, and drill.cpp here.</code></pre>
+        <ul class="checklist">
+          <li><label><input type="checkbox" data-check-id="day12-abuse"> Limits and malformed-input tests pass under sanitizers.</label></li>
+          <li><label><input type="checkbox" data-check-id="day12-fuzz"> Bounded fuzz run and regression corpus are saved.</label></li>
+          <li><label><input type="checkbox" data-check-id="day12-boundary"> Threat note separates transport protection from application safety.</label></li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>If you get stuck</h2>
+        <p><strong>20 minutes:</strong> minimize the input and name the first violated bound. <strong>40:</strong> inspect the parser trap table in the local guides. <strong>60:</strong> compare only the smallest parser/decoder function in <code>capstone/reference/</code>, close it, then turn the minimized input into a regression.</p>
+        <aside class="callout"><strong>Use your teacher.</strong> Ask the agent follow-ups with the minimized bytes, sanitizer stack, expected budget, and actual behavior. Never paste secrets, private keys, or production captures.</aside>
+        <div class="actions"><button class="button" type="button" data-lesson-complete="day-12">Mark lesson complete</button></div>
+      </section>
+    </article>
+
+    <nav class="lesson-nav" aria-label="Lesson navigation">
+      <a href="0011-persist-and-recover.html">← Day 11 · Persist and recover</a>
+      <a href="0013-design-and-explain.html">Day 13 · Design and explain →</a>
+    </nav>
+  </main>
+</body>
+</html>

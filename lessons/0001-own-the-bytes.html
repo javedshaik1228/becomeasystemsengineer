@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Day 1 — Own the bytes · NetForge</title>
+  <link rel="stylesheet" href="../assets/course.css">
+</head>
+<body data-day="01" data-title="Own the bytes" data-duration="150">
+<main class="shell lesson-shell">
+  <header class="masthead"><a class="brand" href="../index.html">NetForge</a><span class="quiet">Day 01 / 14</span></header>
+  <article>
+    <p class="eyebrow">Core mechanics · object lifetime · framing</p>
+    <h1>Own the bytes</h1>
+    <p class="lede">Your first win is small and real: turn an arbitrary TCP byte stream into bounded application frames without assuming reads line up with messages.</p>
+    <div class="meta-row"><span class="pill">150 minutes</span><span class="pill">Gate: day01</span><span class="pill">Output: frame codec</span></div>
+
+    <aside class="callout"><strong>Mission tie.</strong> Every target role depends on reasoning across C++ memory and network bytes. Today establishes the invariant every later concurrency, storage, and security layer trusts.</aside>
+
+    <h2>Baseline diagnostic</h2>
+    <p>Answer cold. This sets pace, not worth. Do not look anything up until scored.</p>
+    <section class="quiz" data-diagnostic>
+      <div data-diagnostic-answer="b" data-diagnostic-domain="networking"><p><strong>1.</strong> Which TCP statement is correct?</p><label class="choice"><input type="radio" name="d1q1" value="a"> One send always equals one frame</label><label class="choice"><input type="radio" name="d1q1" value="b"> TCP preserves bytes, not message boundaries</label></div>
+      <div data-diagnostic-answer="a" data-diagnostic-domain="resources"><p><strong>2.</strong> What does RAII buy?</p><label class="choice"><input type="radio" name="d1q2" value="a"> Cleanup follows object lifetime across exits</label><label class="choice"><input type="radio" name="d1q2" value="b"> Cleanup requires one manual call everywhere</label></div>
+      <div data-diagnostic-answer="a" data-diagnostic-domain="concurrency"><p><strong>3.</strong> What can a data race do?</p><label class="choice"><input type="radio" name="d1q3" value="a"> Conflicting unsynchronized access can cause undefined behavior</label><label class="choice"><input type="radio" name="d1q3" value="b"> Conflicting unsynchronized access only returns stale values</label></div>
+      <div data-diagnostic-answer="b" data-diagnostic-domain="concurrency"><p><strong>4.</strong> How should a condition variable be used?</p><label class="choice"><input type="radio" name="d1q4" value="a"> Wait once then trust every wakeup</label><label class="choice"><input type="radio" name="d1q4" value="b"> Wait with predicate under matching mutex</label></div>
+      <div data-diagnostic-answer="b" data-diagnostic-domain="storage"><p><strong>5.</strong> Which durability statement survives a crash?</p><label class="choice"><input type="radio" name="d1q5" value="a"> Successful write always proves durable storage</label><label class="choice"><input type="radio" name="d1q5" value="b"> Durability needs an explicit persistence contract</label></div>
+      <div data-diagnostic-answer="b" data-diagnostic-domain="modern-cpp"><p><strong>6.</strong> What is a <code>span</code>?</p><label class="choice"><input type="radio" name="d1q6" value="a"> A span always owns its elements</label><label class="choice"><input type="radio" name="d1q6" value="b"> A span borrows contiguous existing elements</label></div>
+      <div data-diagnostic-answer="b" data-diagnostic-domain="resources"><p><strong>7.</strong> What is safe after Linux <code>close</code> returns <code>EINTR</code>?</p><label class="choice"><input type="radio" name="d1q7" value="a"> Retry close after every interrupted result</label><label class="choice"><input type="radio" name="d1q7" value="b"> Never blindly retry an interrupted close</label></div>
+      <div data-diagnostic-answer="b" data-diagnostic-domain="concurrency"><p><strong>8.</strong> Which synchronizes C++ threads?</p><label class="choice"><input type="radio" name="d1q8" value="a"> Volatile provides portable thread synchronization guarantees</label><label class="choice"><input type="radio" name="d1q8" value="b"> Atomics or locks establish synchronization guarantees</label></div>
+      <button class="button" data-score-diagnostic>Score diagnostic</button><p class="feedback" data-diagnostic-result aria-live="polite"></p>
+    </section>
+
+    <h3>Practical lane check <span class="quiet">20 min, closed book</span></h3>
+    <p>The multiple-choice score is provisional. Before reading the model below, open <code>diagnostic/baseline.cpp</code>, implement its one C++20 function, and run:</p>
+    <pre id="diagnostic-command"><code>./scripts/diagnostic.sh</code></pre>
+    <div class="actions"><button class="button secondary" data-copy="#diagnostic-command">Copy command</button></div>
+    <p><strong>Choose the lower lane proved by both checks:</strong> Core if the knowledge score is under 60% or the practical gate does not pass in 20 minutes; Core + one Stretch item if only one check is strong; Compressed + Stretch only if the knowledge score is at least 80% <em>and</em> the practical gate passes within 20 minutes without references, AI, or answer-completion tools. If no compiler exists, complete <a href="../SETUP.md">setup</a> first and do not infer a lane.</p>
+
+    <h2>Recall before reading</h2>
+    <p>On paper: when do local variables die on normal return and exception exit? What is the difference between four bytes of storage and a live <code>uint32_t</code> object? Why would casting unaligned network bytes to a struct be risky?</p>
+
+    <h2>The model: stream → header → bounded payload</h2>
+    <p>TCP provides a reliable, ordered <em>byte stream</em>, not records. RFC 9293 states this directly. Your protocol therefore owns message boundaries: read exactly four bytes, decode an unsigned big-endian length, reject it if it exceeds policy, then read exactly that many payload bytes. Short reads are progress, EOF is a state, and errors retain <code>errno</code>.</p>
+    <ol class="flow"><li>Accumulate header</li><li>Decode length</li><li>Validate bound</li><li>Allocate payload</li><li>Accumulate bytes</li><li>Return frame</li></ol>
+    <p>Use <code>std::byte</code> for uninterpreted storage, <code>std::span</code> for a non-owning bounded view, and fixed-width unsigned integers for wire fields. Review the <a href="../reference/0001-cpp-lifetime-ownership.html">lifetime sheet</a> and selected TCP concepts in <a href="https://www.rfc-editor.org/rfc/rfc9293.html#section-2.2">RFC 9293 §2.2</a>.</p>
+
+    <h2>Build, break, explain</h2>
+    <ol>
+      <li><strong>Build (55 min):</strong> implement the Day 1 TODOs in <code>capstone/work/src/protocol.cpp</code>. Make <code>read_exact</code> and <code>write_all</code> loop on progress, retry <code>EINTR</code>, distinguish EOF/error, and never allocate before the length check.</li>
+      <li><strong>Break (15 min):</strong> add one manual experiment for header split 2+2, payload split 1+N, zero payload, truncated payload, and 65,537-byte length under a 1 KiB policy.</li>
+      <li><strong>Check (5 min):</strong></li>
+    </ol>
+    <pre id="day01-command"><code>./scripts/check.sh work day01</code></pre>
+    <div class="actions"><button class="button secondary" data-copy="#day01-command">Copy command</button></div>
+
+    <aside class="callout warning"><strong>Stuck protocol.</strong> At 20 minutes, write the observed status and one hypothesis. At 40, read only the framing section of <a href="../capstone/PROTOCOL.md">PROTOCOL.md</a>. At 60, compare one reference function, close it, then implement from memory.</aside>
+
+    <section class="quiz" data-quiz data-answer="b" data-correct="Correct. TCP preserves order, while your application creates frame boundaries." data-incorrect="Separate transport guarantees from application framing, then retry.">
+      <h3>Retrieval check</h3><p>Which statement should drive the decoder?</p>
+      <label class="choice"><input type="radio" name="q1" value="a"> One send always equals one frame</label>
+      <label class="choice"><input type="radio" name="q1" value="b"> TCP preserves bytes, not message boundaries</label>
+      <label class="choice"><input type="radio" name="q1" value="c"> One recv always fills requested bytes</label>
+      <button class="button secondary">Check answer</button><p class="feedback" aria-live="polite"></p>
+    </section>
+
+    <h2>Coding and interview drill</h2>
+    <p>Do <a href="../interview/CODING-DRILLS.md#day-01--incremental-frame-decoder">Day 1: incremental frame decoder</a> for 25 minutes. Then answer aloud: “Design a safe length-prefixed protocol reader.” Lead with the retained-prefix invariant, state O(total bytes), and test truncation before happy-path syntax.</p>
+
+    <h2>Proof gate</h2>
+    <ul class="checklist">
+      <li><label><input type="checkbox" data-check-id="day01-tests"> <code>day01</code> passes from a clean build.</label></li>
+      <li><label><input type="checkbox" data-check-id="day01-diagnostic"> The practical diagnostic passes; my chosen lane uses the lower of knowledge and practical evidence.</label></li>
+      <li><label><input type="checkbox" data-check-id="day01-bound"> Oversized length is rejected before payload allocation.</label></li>
+      <li><label><input type="checkbox" data-check-id="day01-explain"> I explained short read, EOF, EINTR, and framing without notes.</label></li>
+      <li><label><input type="checkbox" data-check-id="day01-evidence"> Evidence is saved under <code>capstone/work/evidence/day-01/</code>.</label></li>
+    </ul>
+    <p><strong>Stretch:</strong> write an incremental decoder that retains a suffix across arbitrary chunks. Core gate first.</p>
+    <button class="button" data-lesson-complete="day-01">Mark lesson complete</button>
+    <p class="quiet">Ask the agent any follow-up question when a causal step is unclear; show the smallest failing observation.</p>
+  </article>
+  <nav class="lesson-nav"><a href="../index.html">← Dashboard</a><a href="0002-never-leak-a-descriptor.html">Day 2 →</a></nav>
+</main><script src="../assets/course.js"></script>
+</body></html>

@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Day 13: a 45-minute system design, specialist branch, and senior stories.">
+  <title>Day 13 — Design and explain</title>
+  <link rel="stylesheet" href="../assets/course.css">
+  <script src="../assets/course.js" defer></script>
+</head>
+<body data-day="13" data-title="Design and explain" data-duration="180">
+  <main class="shell lesson-shell">
+    <header class="masthead">
+      <a class="brand" href="../index.html">NetForge</a>
+      <span class="quiet">Day 13 of 14 · 180 minutes</span>
+    </header>
+
+    <article>
+      <section class="hero">
+        <p class="eyebrow">Requirements · trade-offs · leadership</p>
+        <h1>Design and explain</h1>
+        <p class="lede">Lead a 45-minute design instead of listing components. Make requirements and numbers drive invariants, overload, failure recovery, and one specialist branch; then support the design with concise senior-level evidence.</p>
+        <div class="meta-row">
+          <span class="pill">Measurable win</span>
+          <span class="pill">One recorded 45-minute design</span>
+          <span class="pill">Core 155 min · Stretch 25 min</span>
+        </div>
+      </section>
+
+      <section>
+        <h2>Your measurable win</h2>
+        <p>Record and score one uninterrupted 45-minute design at 80/100 or higher with no zero, choose one role-aligned branch, and prepare three senior stories whose claims point to observable outcomes.</p>
+      </section>
+
+      <section>
+        <h2>Recall before notes <span class="quiet">10 min</span></h2>
+        <ol>
+          <li>State NetForge's backpressure invariant in one sentence.</li>
+          <li>State its acknowledgement/durability invariant in one sentence.</li>
+          <li>Place TCP, TLS, PKI, IPSec, framing, and authorization in order.</li>
+        </ol>
+        <details><summary>Check only after answering aloud</summary><p>Admission, queues, and pending bytes remain bounded by policy. Durable ACK follows valid WAL append and required sync. Network/transport protection does not replace framed parsing or application authorization.</p></details>
+      </section>
+
+      <section>
+        <h2>Compact mental model</h2>
+        <blockquote>A strong design is a chain: requirement → estimate → invariant → mechanism → failure → observable trade-off.</blockquote>
+        <table>
+          <thead><tr><th>Clock</th><th>Drive the discussion</th><th>Output</th></tr></thead>
+          <tbody>
+            <tr><td>0–5 min</td><td>Clarify users, operations, SLOs, consistency, scope</td><td>Prioritized requirements</td></tr>
+            <tr><td>5–10</td><td>Estimate QPS, payload, connections, state, growth</td><td>Capacity envelope</td></tr>
+            <tr><td>10–20</td><td>Define API/protocol and end-to-end data flow</td><td>Contracts and ownership</td></tr>
+            <tr><td>20–30</td><td>Bound queues, storage, concurrency, overload</td><td>Core architecture</td></tr>
+            <tr><td>30–38</td><td>Walk failures, recovery, security, observability</td><td>Failure matrix</td></tr>
+            <tr><td>38–43</td><td>Deepen one specialist branch</td><td>Role signal</td></tr>
+            <tr><td>43–45</td><td>Summarize trade-offs, risks, next measurement</td><td>Decisive close</td></tr>
+          </tbody>
+        </table>
+        <aside class="callout"><strong>Authoritative source.</strong> Read Google's SRE chapter on <a href="https://sre.google/sre-book/addressing-cascading-failures/">addressing cascading failures</a> for overload, retries, queues, and degraded operation. Use the local <a href="../reference/0007-system-design-interview.html">system-design guide</a> as your timed worksheet.</aside>
+      </section>
+
+      <section>
+        <h2>Build → break → explain <span class="quiet">110 min</span></h2>
+        <ol class="flow">
+          <li><strong>Build.</strong> Produce requirements, math, invariants, and flow.</li>
+          <li><strong>Break.</strong> Inject overload and one branch-specific failure.</li>
+          <li><strong>Explain.</strong> Record 45 minutes and score evidence.</li>
+        </ol>
+
+        <h3>Core lane</h3>
+        <ol>
+          <li>Create <code>capstone/work/evidence/day-13/</code> and run <code>./scripts/check.sh work all</code>. In <code>capstone/work/evidence/day-13/architecture.md</code>, document NetForge's clients, operations, non-goals, load assumptions, ownership, threading/readiness model, queue/byte bounds, WAL contract, observability, and top three risks.</li>
+          <li>Choose exactly one of the five distinct branches below. In <code>capstone/work/evidence/day-13/branch.md</code>, name the selection, link its concrete artifact under <code>day-13/branch/</code>, state its hardest failure and observable signal, and list what you still do not know.</li>
+        </ol>
+        <table>
+          <thead><tr><th>Branch</th><th>Concrete artifact</th><th>Honest boundary</th></tr></thead>
+          <tbody>
+            <tr><td>Secure networking</td><td><code>branch/secure-networking.md</code>: layered trust-boundary diagram plus certificate rotation/revocation failure table and observable signals</td><td>Explain TLS, PKI, and IPSec placement; do not claim production cryptography or routing implementation mastery.</td></tr>
+            <tr><td>NAS/storage</td><td><code>branch/nas-storage.md</code>: local-vs-NAS acknowledgement timeline plus client-cache/failover trace plan</td><td>Reason about NFS/SMB state and diagnostics; do not claim complete protocol or distributed-storage mastery.</td></tr>
+            <tr><td>L2/L3 data plane</td><td><code>branch/l2-l3-data-plane.md</code>: desired/observed MAC-VLAN-LAG state table plus warm-restart reconciliation pseudocode and counters</td><td>Explain control/data/SAI/HAL boundaries; do not claim production ASIC SDK or routing-protocol mastery.</td></tr>
+            <tr><td>Unix/payments</td><td><code>branch/unix-payments.md</code>: socket/shared-memory ownership sequence plus ordering, duplicate, idempotency, and replay table</td><td>Demonstrate IPC reasoning; do not invent ISO 8583 or payments-domain experience.</td></tr>
+            <tr><td>Low latency</td><td><code>branch/low-latency/answer.cpp</code>, runner evidence, and <code>tradeoffs.md</code> from the <a href="../interview/quantiq-line-reversal/README.md">closed-book file line-reversal screen</a></td><td>Measure one deterministic file workload; do not promise production latency, trading expertise, or affinity/NUMA gains.</td></tr>
+          </tbody>
+        </table>
+        <ol start="3">
+          <li>Use <a href="../interview/MOCK-ROUNDS.md#mock-c--network-service-design-45-min-day-13">Mock C</a> as the base prompt, adapting the final five minutes to your branch. Record one uninterrupted 45-minute attempt with a visible timer.</li>
+          <li>At minute 28, inject: “downstream latency is 10× and retries doubled load.” At minute 36, inject the matching branch failure: certificate revocation lag; stale NAS cache after failover; MAC/ASIC state divergence after warm restart; a duplicate payment after IPC reconnect; or a p99 latency spike after core migration.</li>
+          <li>Score with <a href="../interview/SCORECARD.md">SCORECARD.md</a>. Cite a timestamp or artifact for every rating; record the lower defensible score, not the aspirational one.</li>
+          <li>Use <a href="../interview/STORY-BANK.md">STORY-BANK.md</a> to prepare three two-minute stories: deep RCA, ambiguous trade-off/ownership, and influence/mentoring. Each needs context, your decision, alternative rejected, measurable result, and lesson.</li>
+        </ol>
+
+        <h3>Stretch lane</h3>
+        <p>Invite a peer to interrupt and challenge assumptions. Add a second architecture variant, migration/rollback plan, and one experiment that would decide between variants. Do not spend Stretch time polishing diagrams before the timed Core recording exists.</p>
+      </section>
+
+      <section class="quiz" data-quiz data-answer="b" data-correct="Correct. Overload behavior is a first-class design policy." data-incorrect="Not yet. Prefer bounded degradation over hidden, expanding work.">
+        <h2>One-question check</h2>
+        <p>What is the strongest response to downstream saturation?</p>
+        <label class="choice"><input type="radio" name="day13-quiz" value="a"> Add workers continuously until peak latency meets targets.</label>
+        <label class="choice"><input type="radio" name="day13-quiz" value="b"> Bound admission, expose saturation, and degrade by policy.</label>
+        <label class="choice"><input type="radio" name="day13-quiz" value="c"> Queue every request so clients never observe rejection.</label>
+        <button class="button secondary" type="button">Check answer</button>
+        <p class="feedback" aria-live="polite"></p>
+      </section>
+
+      <section>
+        <h2>Coding drill <span class="quiet">25 min, closed book</span></h2>
+        <p>Solve <a href="../interview/CODING-DRILLS.md#day-13--failure-domain-placement">Day 13 — Failure-domain placement</a> with the 3/3/15/4-minute timer.</p>
+        <p><strong>Say first:</strong> “No duplicate host; rack diversity is maximal under available healthy inputs.” <strong>Target:</strong> state a defensible greedy complexity and its limitation. Test fewer than three racks, exclusions, imbalance, and deterministic ties; save <code>drill.cpp</code>.</p>
+      </section>
+
+      <section>
+        <h2>Interview drill <span class="quiet">embedded in recording</span></h2>
+        <p>At the end, answer three rapid follow-ups: “Which invariant would you alert on?”, “What fails first at 10× load?”, and “Which fact would make you redesign this?” Then deliver one senior story without hiding team contributions or inflating your role.</p>
+      </section>
+
+      <section>
+        <h2>Proof gate <span class="quiet">10 min</span></h2>
+        <pre><code>mkdir -p capstone/work/evidence/day-13
+./scripts/check.sh work all | tee capstone/work/evidence/day-13/check.txt
+# Save architecture.md, branch.md, branch/&lt;selected-artifact&gt;,
+# design-recording.*, score.md, three-stories.md, and drill.cpp here.</code></pre>
+        <ul class="checklist">
+          <li><label><input type="checkbox" data-check-id="day13-design"> One uninterrupted 45-minute design is recorded and scored.</label></li>
+          <li><label><input type="checkbox" data-check-id="day13-branch"> One branch is deep and its knowledge limits are explicit.</label></li>
+          <li><label><input type="checkbox" data-check-id="day13-stories"> Three concise stories contain decisions and measurable outcomes.</label></li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>If you get stuck</h2>
+        <p><strong>20 minutes:</strong> return to one requirement and one number. <strong>40:</strong> use the local timed worksheet. <strong>60:</strong> review one matching prompt in <code>QUESTION-BANK.md</code>, close it, and restart the design from a blank page. Do not perfect an unrecorded script.</p>
+        <aside class="callout"><strong>Use your teacher.</strong> Ask the agent follow-ups with your requirement table, weakest score row, and timestamped claim. Ask for skeptical interviewer questions, not a replacement design.</aside>
+        <div class="actions"><button class="button" type="button" data-lesson-complete="day-13">Mark lesson complete</button></div>
+      </section>
+    </article>
+
+    <nav class="lesson-nav" aria-label="Lesson navigation">
+      <a href="0012-harden-the-boundary.html">← Day 12 · Harden boundary</a>
+      <a href="0014-prove-readiness.html">Day 14 · Prove readiness →</a>
+    </nav>
+  </main>
+</body>
+</html>
