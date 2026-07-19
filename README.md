@@ -54,6 +54,7 @@ a toy repository.
 - [lessons/](lessons/): fourteen focused, interactive lessons.
 - [labs/](labs/): executable focused labs for measured parallelism and debugging.
 - [capstone/](capstone/): editable work tree, tests, and reference implementation.
+- [Advanced matching-engine capstone](capstone/matching/README.md): a modern C++ price-time-priority order book with lock-free ingress, replayable mock data, and Redis/Kafka edges.
 - [interview/](interview/): question bank, mock rounds, story prompts, scorecards.
 - [.vscode/](.vscode/): optional focused VS Code setup and one-click tasks.
 

@@ -1,0 +1,29 @@
+name: Matching engine build
+
+on:
+  push:
+    paths:
+      - "capstone/matching/**"
+      - "scripts/check-matching.sh"
+      - ".github/workflows/matching.yml"
+  pull_request:
+    paths:
+      - "capstone/matching/**"
+      - "scripts/check-matching.sh"
+      - ".github/workflows/matching.yml"
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure
+        run: cmake -S capstone/matching -B build/matching -DCMAKE_BUILD_TYPE=RelWithDebInfo
+      - name: Build
+        run: cmake --build build/matching --parallel
+      - name: Test
+        run: ctest --test-dir build/matching --output-on-failure
+      - name: Replay mock data
+        run: |
+          build/matching/matching-generate --output build/orders.csv --count 10000
+          build/matching/matching-engine build/orders.csv > build/fills.csv
