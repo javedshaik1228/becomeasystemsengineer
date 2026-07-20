@@ -5,6 +5,8 @@ storage, and security interviews. Over fourteen focused days you will build and
 defend a framed TCP key-value service in C++20, then diagnose it with the same
 tools and mental models expected in senior technical rounds.
 
+Live Site: https://javedshaik1228.github.io/becomeasystemsengineer/
+
 ## Start here
 
 1. Read [MISSION.md](MISSION.md) and the evidence behind the syllabus in
